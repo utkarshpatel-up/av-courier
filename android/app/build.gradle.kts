@@ -10,8 +10,10 @@ android {
         applicationId = "com.house.avcourier.companion"
         minSdk = 26
         targetSdk = 36
-        versionCode = 4
-        versionName = "0.1.3"
+        versionCode = 5
+        versionName = "0.1.4"
+        // Phones only (the picture readers' native code is large): no x86 emulator builds.
+        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
     }
 
     buildTypes {
@@ -37,8 +39,9 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.squareup.okhttp3:okhttp-sse:4.12.0")
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
-    // Reading words in pictures, on the phone (bundled models: work offline).
-    implementation("com.google.mlkit:text-recognition:16.0.1")
+    // Reading words in pictures, on the phone, offline: Tesseract for Gujarati and English (its
+    // language files are in assets/tessdata), ML Kit for Hindi.
+    implementation("cz.adaptech.tesseract4android:tesseract4android:4.8.0")
     implementation("com.google.mlkit:text-recognition-devanagari:16.0.1")
 
     testImplementation("junit:junit:4.13.2")
