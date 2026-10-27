@@ -5,7 +5,7 @@ const crypto = require('crypto');
 const { execFile } = require('child_process');
 const { CopyQueue, fmtBytes } = require('./copyqueue');
 const { Catalog } = require('./catalog');
-const { analyse } = require('./extract');
+const { analyse, searchRequest } = require('./extract');
 const { sendEmail, GmailWatcher } = require('./mail');
 const { WhatsApp } = require('./whatsapp');
 const { Notifier, TEMPLATES, fill, firstName, rowLine } = require('./notifier');
@@ -161,6 +161,11 @@ const drives = new DriveIndex({
 const tapeFor = (p) => [...drives.drives.values()].find((d) => d.tape && path.resolve(p).toUpperCase().startsWith(path.resolve(d.root).toUpperCase()));
 const withDisk = (rows) => rows.map((r) => ({ ...r, found: drives.find(r) }));
 const findRows = (q, limit) => withDisk(catalog.search(q, limit));
+
+// A request's matches (a list of recordings item by item: extract.js searchRequest).
+const matchRequest = (text, a) => withDisk(searchRequest(catalog, text, a));
+// The request's words plus the words read from its pictures.
+const requestText = (r) => [r.text, ...Object.values(r.ocr || {})].filter(Boolean).join('\n');
 function refreshFound() {
   for (const r of requests) if (r.matches?.length && !['closed', 'dismissed'].includes(r.status)) r.matches = withDisk(r.matches);
   saveRequests();
@@ -204,10 +209,10 @@ async function analyseRequest(req) {
     if (req.ocr[f] != null) continue;
     try { req.ocr[f] = await ocr.read(f); } catch (e) { req.ocr[f] = ''; activity(`Could not read the picture from ${req.from.name}: ${e.message}`); }
   }
-  const seen = files.map((f) => req.ocr[f]).filter(Boolean).join('\n');
-  req.analysis = await analyse({ text: [req.text, seen].filter(Boolean).join('\n'), images, apiKey });
+  const text = requestText(req);
+  req.analysis = await analyse({ text, images, apiKey });
   const a = req.analysis;
-  req.matches = findRows({ text: a.searchText || req.text, ids: a.ids, numbers: a.numbers, dates: a.dates, keywords: a.keywords }, 15);
+  req.matches = matchRequest(text, a);
   if (a.aiError) activity(`Claude could not read the request from ${req.from.name}: ${a.aiError}`);
 }
 
@@ -269,7 +274,7 @@ function announce(req) {
 }
 
 // Search the catalogue again with what was read from the request.
-const rematch = (r) => { if (r.analysis) r.matches = findRows({ text: r.analysis.searchText || r.text, ids: r.analysis.ids, numbers: r.analysis.numbers, dates: r.analysis.dates, keywords: r.analysis.keywords }, 15); };
+const rematch = (r) => { if (r.analysis) r.matches = matchRequest(requestText(r), r.analysis); };
 
 const openRequests = () => requests.filter((r) => ['new', 'attention'].includes(r.status));
 

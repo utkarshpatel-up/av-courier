@@ -45,7 +45,14 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="avcourier" android:host="pair" />
             </intent-filter>
-            <!-- Share a picture to AV Courier: it reads the request in it. -->
+        </activity>
+
+        <!-- A request read from a picture. Share a picture to AV Courier to open it. -->
+        <activity
+            android:name=".ScanActivity"
+            android:exported="true"
+            android:label="Read request"
+            android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />

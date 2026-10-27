@@ -31,8 +31,8 @@ test('paired phones download the catalogue, gzipped, one row per line', async (t
   assert.equal(raw.res.headers['x-catalog-version'], String(catalog.importedAt));
   const lines = zlib.gunzipSync(raw.body).toString('utf8').trim().split('\n');
   const head = JSON.parse(lines[0]);
-  assert.equal(head.rows, 18);
-  assert.equal(lines.length, 19);
+  assert.equal(head.rows, 21);
+  assert.equal(lines.length, 22);
   assert.deepEqual(head.sheets.map((s) => s.kind), ['raw', 'episode']);
   const row = JSON.parse(lines.find((l) => l.includes('"DD-F-4K-3046-E"') && l.includes('"raw":"DD-F-4K-3046-E"')));
   assert.deepEqual(row.loc, ['', '', '', ''], 'empty backup columns travel too');

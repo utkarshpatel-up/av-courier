@@ -131,6 +131,14 @@
     ]
    },
    {
+    "id": "DD Sevarthi Experience_000098",
+    "score": 30,
+    "why": [
+     "DD",
+     "HD"
+    ]
+   },
+   {
     "id": "Aptavani-10(P)_000014",
     "score": 30,
     "why": [
@@ -260,6 +268,14 @@
     ]
    },
    {
+    "id": "DD Sevarthi Experience_000098",
+    "score": 30,
+    "why": [
+     "DD",
+     "HD"
+    ]
+   },
+   {
     "id": "Aptavani-10(P)_000014",
     "score": 30,
     "why": [
@@ -354,6 +370,27 @@
    },
    {
     "id": "Aptavani-14-B2_000014",
+    "score": 15,
+    "why": [
+     "F"
+    ]
+   },
+   {
+    "id": "DD Sevarthi Satsang_000097",
+    "score": 15,
+    "why": [
+     "F"
+    ]
+   },
+   {
+    "id": "DD Sevarthi Satsang_000098",
+    "score": 15,
+    "why": [
+     "F"
+    ]
+   },
+   {
+    "id": "DD Sevarthi Experience_000098",
     "score": 15,
     "why": [
      "F"
@@ -513,6 +550,11 @@
    },
    {
     "id": "Aptavani-14-B2_000014",
+    "score": 2,
+    "why": []
+   },
+   {
+    "id": "DD Sevarthi Experience_000098",
     "score": 2,
     "why": []
    },
@@ -681,6 +723,27 @@
     ]
    },
    {
+    "id": "DD Sevarthi Satsang_000097",
+    "score": 15,
+    "why": [
+     "DD"
+    ]
+   },
+   {
+    "id": "DD Sevarthi Satsang_000098",
+    "score": 15,
+    "why": [
+     "DD"
+    ]
+   },
+   {
+    "id": "DD Sevarthi Experience_000098",
+    "score": 15,
+    "why": [
+     "DD"
+    ]
+   },
+   {
     "id": "Aptavani-10(P)_000014",
     "score": 15,
     "why": [
@@ -762,6 +825,39 @@
  },
  {
   "mode": "find",
+  "q": "Sevarthi episode 98",
+  "results": [
+   {
+    "id": "DD Sevarthi Satsang_000098",
+    "score": 176,
+    "why": [
+     "episode 98"
+    ]
+   }
+  ]
+ },
+ {
+  "mode": "find",
+  "q": "sevarthi experience 98",
+  "results": [
+   {
+    "id": "DD Sevarthi Experience_000098",
+    "score": 192,
+    "why": [
+     "episode 98"
+    ]
+   },
+   {
+    "id": "DD Sevarthi Satsang_000098",
+    "score": 166,
+    "why": [
+     "episode 98"
+    ]
+   }
+  ]
+ },
+ {
+  "mode": "find",
   "q": "HDD-0124",
   "results": [
    {
@@ -804,6 +900,16 @@
     ]
    },
    {
+    "id": "DD Sevarthi Satsang_000097",
+    "score": 34,
+    "why": []
+   },
+   {
+    "id": "DD Sevarthi Satsang_000098",
+    "score": 34,
+    "why": []
+   },
+   {
     "id": "DD Vitraag_006955",
     "score": 25,
     "why": [
@@ -822,6 +928,11 @@
    },
    {
     "id": "NM-F-DV-0418-E2",
+    "score": 8,
+    "why": []
+   },
+   {
+    "id": "DD Sevarthi Experience_000098",
     "score": 8,
     "why": []
    }
@@ -848,6 +959,16 @@
    },
    {
     "id": "DD-F-HD-1796-E",
+    "score": 16,
+    "why": []
+   },
+   {
+    "id": "DD Sevarthi Satsang_000097",
+    "score": 16,
+    "why": []
+   },
+   {
+    "id": "DD Sevarthi Satsang_000098",
     "score": 16,
     "why": []
    }
@@ -970,6 +1091,14 @@
    },
    {
     "id": "Aptavani-14-B2_000014",
+    "score": 30,
+    "why": [
+     "DD",
+     "HD"
+    ]
+   },
+   {
+    "id": "DD Sevarthi Experience_000098",
     "score": 30,
     "why": [
      "DD",
@@ -1118,7 +1247,7 @@
     ]
    },
    {
-    "id": "Aptavani-10(P)_000014",
+    "id": "DD Sevarthi Experience_000098",
     "score": 30,
     "why": [
      "DD",
@@ -1198,5 +1327,111 @@
   "mode": "request",
   "q": "Need raw folder 3099 for making prachaar video",
   "results": []
+ },
+ {
+  "mode": "request",
+  "q": "અમને નીચેના બે સત્સંગના original parts જોઈએ છે.\n\n1) Night Satsang 3 June 2011 Los Angeles - 35:00 to\n39:00\n2) General - Part 098 - Sevarthi Shibir Udaipur 2012 - DD - Sevarthi Episode -\n098",
+  "results": [
+   {
+    "id": "DD-F-HD-1260-E1",
+    "score": 60,
+    "why": [
+     "2011-06-03"
+    ]
+   },
+   {
+    "id": "DD Sevarthi Satsang_000098",
+    "score": 231,
+    "why": [
+     "episode 98",
+     "DD",
+     "2012"
+    ]
+   },
+   {
+    "id": "DD Vitraag_002350",
+    "score": 60,
+    "why": [
+     "2011-06-03"
+    ]
+   },
+   {
+    "id": "DD Sevarthi Satsang_000097",
+    "score": 81,
+    "why": [
+     "DD",
+     "2012"
+    ]
+   },
+   {
+    "id": "DD-F-4K-3046-E",
+    "score": 8,
+    "why": []
+   },
+   {
+    "id": "DD-I-HD-2616-1",
+    "score": 8,
+    "why": []
+   },
+   {
+    "id": "DD Vitraag_006955",
+    "score": 33,
+    "why": [
+     "DD"
+    ]
+   },
+   {
+    "id": "NM-F-DV-0418-E2",
+    "score": 8,
+    "why": []
+   },
+   {
+    "id": "DD Hindi_000953",
+    "score": 33,
+    "why": [
+     "DD"
+    ]
+   },
+   {
+    "id": "DD-F-HD-1796-E",
+    "score": 8,
+    "why": []
+   },
+   {
+    "id": "Aptavani-14-B2_000014",
+    "score": 33,
+    "why": [
+     "DD"
+    ]
+   },
+   {
+    "id": "DD Sevarthi Experience_000098",
+    "score": 33,
+    "why": [
+     "DD"
+    ]
+   },
+   {
+    "id": "DD-F-4K-3034-E",
+    "score": 23,
+    "why": [
+     "DD"
+    ]
+   },
+   {
+    "id": "DD-F-DV-0418-E1",
+    "score": 23,
+    "why": [
+     "DD"
+    ]
+   },
+   {
+    "id": "DD-I-HD-2422-1",
+    "score": 23,
+    "why": [
+     "DD"
+    ]
+   }
+  ]
  }
 ]

@@ -1,7 +1,7 @@
 {
   "name": "av-courier",
   "productName": "AV Courier",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Verified copy queue that finds requested data in the drive/tape catalogue and tells each requester when it is done",
   "main": "electron/main.js",
   "scripts": {

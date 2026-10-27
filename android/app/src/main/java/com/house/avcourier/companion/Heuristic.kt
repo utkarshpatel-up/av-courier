@@ -29,6 +29,9 @@ object Heuristic {
         """\b(need|needed|send|share|give|want|require|required|request|can you|joie|joiye|joiae|joiti|jove|mokal\w*|moklo|bhej\w*|chahiye|chaiye|chahie|aapo|apo|apjo|aapjo|aapsho|mangta|dedo|de do)\b""",
         RegexOption.IGNORE_CASE,
     )
+    // The same in Gujarati and Hindi script ("જોઈએ છે", "મોકલજો", "चाहिए"): \b does not work there.
+    private val ASK_SCRIPT = Regex("""(જોઈએ|જોઇએ|જોઈએ|જોઇતા|જોઈતા|મોકલ\S*|આપજો|આપશો|મૂકી દે\S*|મુકી દે\S*|चाहिए|चाहिये|भेज\S*|दीजिए|दीजिये|दे दो)""")
+    private val ARCHIVE_SCRIPT = Regex("""(સત્સંગ|સત્સંગ|વિડિયો|વિડીયો|વીડિયો|રેકોર્ડિંગ|શિબિર|सत्संग|वीडियो|विडियो|रिकॉर्डिंग|शिबिर)""")
     // Politeness is not asking: "Please plan the video setup" is an instruction.
     private val POLITE = Regex("""\b(please|pls|plz|kindly)\b""", RegexOption.IGNORE_CASE)
     private val ARCHIVE = Regex(
@@ -55,8 +58,8 @@ object Heuristic {
     fun heuristic(text: String?, now: Long = System.currentTimeMillis()): Result {
         val t = clean(text)
         fun count(re: Regex) = re.findAll(t).map { it.value.lowercase() }.toSet().size
-        val ask = count(ASK)
-        val archive = count(ARCHIVE) + count(ARCHIVE_WEAK) / 2.0
+        val ask = count(ASK) + count(ASK_SCRIPT)
+        val archive = count(ARCHIVE) + count(ARCHIVE_SCRIPT) + count(ARCHIVE_WEAK) / 2.0
         val noise = count(NOISE)
         val foundIds = ids(t).filter { ID_KIND.matches(it) }
         val foundDates = dates(t, now = now)
@@ -76,6 +79,25 @@ object Heuristic {
             dates = foundDates,
             summary = t.split('\n')[0].take(140),
         )
+    }
+
+    // A request that lists several recordings ("1) … 2) …", "• …"): one text per item, so each
+    // is searched on its own (extract.js requestItems). Fewer than two items: the whole text.
+    private val ITEM = Regex("""^\s*(?:\(?\d{1,2}[).]|[a-h]\)|[•*▪●◦])\s+""", RegexOption.IGNORE_CASE)
+
+    fun items(text: String?): List<String> {
+        val items = ArrayList<String>()
+        var cur: String? = null
+        for (line in (text ?: "").split('\n')) {
+            val l = line.trim()
+            when {
+                ITEM.containsMatchIn(l) -> { cur?.let { items.add(it) }; cur = l.replace(ITEM, "") }
+                l.isEmpty() -> { cur?.let { items.add(it) }; cur = null }
+                cur != null -> cur += " $l"
+            }
+        }
+        cur?.let { items.add(it) }
+        return if (items.size >= 2) items else listOf(text ?: "")
     }
 
     // ---------------------------------------------------------------- catalog.js ids()

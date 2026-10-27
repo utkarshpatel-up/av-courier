@@ -8,7 +8,7 @@ const os = require('os');
 const path = require('path');
 const XLSX = require('xlsx');
 const { Catalog } = require('../electron/catalog');
-const { heuristic } = require('../electron/extract');
+const { searchRequest } = require('../electron/extract');
 
 const OUT = path.join(__dirname, '..', 'android', 'app', 'src', 'test', 'resources');
 
@@ -34,6 +34,9 @@ const EPISODES = [
   ['DD Vitraag_006955', 'DD Vitraag', 6955, 'DD-F-HD-1796-E', 5, 2, 2021, 'General', 'Adalaj', 'DD Vitraag LTO-21'],
   ['DD Hindi_000953', 'DD Hindi', 953, 'DD-F-4K-1314-M', 9, 5, 2019, 'Hindi Shibir', 'Adalaj', 'DD Hindi - 04'],
   ['Aptavani-14-B2_000014', 'Aptavani-14-B2', 14, 'DD-F-4K-3034-E', 15, 9, 2026, 'Aptavani-14 Part-05', 'Adalaj', ''],
+  ['DD Sevarthi Satsang_000097', 'DD Sevarthi Satsang', 97, 'DD-F-DV-1470-E', 2, 9, 2012, 'Sevarthi Satsang', 'Udaipur', 'General-03'],
+  ['DD Sevarthi Satsang_000098', 'DD Sevarthi Satsang', 98, 'DD-F-DV-1470-E', 2, 9, 2012, 'Sevarthi Satsang', 'Udaipur', 'General-03'],
+  ['DD Sevarthi Experience_000098', 'DD Sevarthi Experience', 98, 'DD-F-HD-2201-E', 4, 4, 2023, 'Sevarthi Experience', 'Adalaj', ''],
   ['Aptavani-10(P)_000014', 'Aptavani-10(P)', 14, 'DD-F-HD-0999-E', 1, 1, 2016, 'Aptavani-10 Purvardh', 'Adalaj', 'Apt LTO-02'],
 ];
 
@@ -41,6 +44,7 @@ const EPISODES = [
 const FIND = [
   'folder 3046', 'DD-F-4K-3034-E', 'dd f 4k 3034 e', 'master ssd 123', 'lto 002', 'navratri garba 2026', 'gurupurnima 2019 adalaj',
   'nm mini dv 196', 'NM master 418', 'DD Vitraag 2350', 'Aptavani-14-B2 episode 14', 'aptavani 14', 'trimandir making', 'making of sankul bulding',
+  'Sevarthi episode 98', 'sevarthi experience 98',
   'HDD-0124', 'drive 124', 'sevarthi satsang feb 2021', 'satsang hong kong', 'folder 3099 making', 'DD-F-HD-1796-E',
 ];
 const REQUESTS = [
@@ -51,6 +55,13 @@ const REQUESTS = [
   'Gurupurnima 2019 Chicago ni recording bhejo',
   'drive no 124 ma shu che?',
   'Need raw folder 3099 for making prachaar video',
+  // A list: each item searched on its own (searchRequest), Gujarati asking words.
+  `અમને નીચેના બે સત્સંગના original parts જોઈએ છે.
+
+1) Night Satsang 3 June 2011 Los Angeles - 35:00 to
+39:00
+2) General - Part 098 - Sevarthi Shibir Udaipur 2012 - DD - Sevarthi Episode -
+098`,
 ];
 
 function build() {
@@ -71,8 +82,7 @@ function build() {
   const expected = [
     ...FIND.map((q) => ({ mode: 'find', q, results: out(c.search(q, 100)) })),
     ...REQUESTS.map((q) => {
-      const a = heuristic(q);
-      return { mode: 'request', q, results: out(c.search({ text: q, ids: a.ids, numbers: a.numbers, dates: a.dates, keywords: a.keywords }, 15)) };
+      return { mode: 'request', q, results: out(searchRequest(c, q)) };
     }),
   ];
   return { ndjson, expected: JSON.stringify(expected, null, 1) + '\n', catalog: c };

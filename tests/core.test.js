@@ -298,3 +298,31 @@ test('bank, bill and promo messages are not data requests', () => {
     'Vitraag episode 2350 mokalo',
   ]) assert.ok(heuristic(t).isRequest, t);
 });
+
+// ---------------------------------------------------------------- requests listing several recordings
+const { requestItems } = require('../electron/extract');
+
+const ALPA = `Jsca,
+પાયલબેન સાથે વાત થયા પ્રમાણે અમને નીચેના બે સત્સંગના original parts જોઈએ છે.
+
+1) Recent Satsang - Night Satsang 20 August 2026 _ Gujarati _ Pujyashree Deepakbhai - Bipinbhai Gutka - 35:00 to
+39:00
+2) General - Part 098 - Sevarthi Shibir Udaipur 2012 - DD - Sevarthi Episode -
+098
+
+આ parts તમે \\dbffs24\Share01 આ path પર મૂકી દેશો ?`;
+
+test('a numbered list is split into its items, wrapped lines kept', () => {
+  assert.deepStrictEqual(requestItems(ALPA), [
+    'Recent Satsang - Night Satsang 20 August 2026 _ Gujarati _ Pujyashree Deepakbhai - Bipinbhai Gutka - 35:00 to 39:00',
+    'General - Part 098 - Sevarthi Shibir Udaipur 2012 - DD - Sevarthi Episode - 098',
+  ]);
+  assert.deepStrictEqual(requestItems('need folder 3046\nfrom hdd 12'), ['need folder 3046\nfrom hdd 12']);
+  assert.deepStrictEqual(requestItems('• DD Vitraag 2350\n• master 418'), ['DD Vitraag 2350', 'master 418']);
+});
+
+test('Gujarati script asking words make a request', () => {
+  assert.ok(heuristic(ALPA).isRequest);
+  assert.ok(heuristic('અમને આ સત્સંગ મોકલજો').isRequest);
+  assert.ok(!heuristic('સત્સંગ સરસ હતો').isRequest);
+});

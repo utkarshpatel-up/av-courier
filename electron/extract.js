@@ -7,6 +7,9 @@ const { ids, dates } = require('./catalog');
 // "bhejo", "chahiye") for archive material. Asking words alone are not enough:
 // bank, bill and delivery messages "request", say "please" and carry dates too.
 const ASK = /\b(need|needed|send|share|give|want|require|required|request|can you|joie|joiye|joiae|joiti|jove|mokal\w*|moklo|bhej\w*|chahiye|chaiye|chahie|aapo|apo|apjo|aapjo|aapsho|mangta|dedo|de do)\b/gi;
+// The same in Gujarati and Hindi script ("જોઈએ છે", "મોકલજો", "चाहिए"): \b does not work there.
+const ASK_SCRIPT = /(જોઈએ|જોઇએ|જોઈએ|જોઇતા|જોઈતા|મોકલ\S*|આપજો|આપશો|મૂકી દે\S*|મુકી દે\S*|चाहिए|चाहिये|भेज\S*|दीजिए|दीजिये|दे दो)/g;
+const ARCHIVE_SCRIPT = /(સત્સંગ|સત્સંગ|વિડિયો|વિડીયો|વીડિયો|રેકોર્ડિંગ|શિબિર|सत्संग|वीडियो|विडियो|रिकॉर्डिंग|शिबिर)/g;
 // Politeness is not asking: "Please plan the video setup" is an instruction.
 const POLITE = /\b(please|pls|plz|kindly)\b/gi;
 const ARCHIVE = /\b(footage|videos?|clips?|recordings?|raw|data|satsang|katha|shibir|parayan|episodes?|audio|program(me)?|darshan|vidhi|gnanvidhi|aptavani|vitraag|janma ?jayanti|guru ?purnima|bhakti|pratikraman|master|mini ?dv|dvcam|lto|tape|hdd|ssd)\b/gi;
@@ -19,7 +22,7 @@ const clean = (s) => String(s || '').replace(/[​-‏‪-‮⁦-⁩﻿]/g, '').
 function heuristic(text) {
   const t = clean(text);
   const count = (re) => new Set((t.match(re) || []).map((w) => w.toLowerCase())).size;
-  const ask = count(ASK), archive = count(ARCHIVE) + count(ARCHIVE_WEAK) / 2, noise = count(NOISE);
+  const ask = count(ASK) + count(ASK_SCRIPT), archive = count(ARCHIVE) + count(ARCHIVE_SCRIPT) + count(ARCHIVE_WEAK) / 2, noise = count(NOISE);
   const foundIds = ids(t).filter((id) => /^(hdd|hd|drive|d|disk|ssd|tape|t|lto|dv|bt)\d+$/.test(id));
   const foundDates = dates(t);
   const years = (t.match(/\b(19[5-9]\d|20\d\d)\b/g) || []).length;
@@ -129,4 +132,41 @@ async function analyse({ text, images = [], apiKey }) {
   }
 }
 
-module.exports = { analyse, heuristic, withClaude };
+// A request that lists several recordings ("1) … 2) …", "• …"): one text per item, so each
+// is searched on its own and a strong item cannot crowd out the others. A wrapped item keeps
+// its following lines; a blank line ends it. Fewer than two items: the whole text.
+const ITEM = /^\s*(?:\(?\d{1,2}[).]|[a-h]\)|[•*▪●◦])\s+/i;
+function requestItems(text) {
+  const items = [];
+  let cur = null;
+  for (const line of String(text || '').split('\n')) {
+    const l = line.trim();
+    if (ITEM.test(l)) { if (cur) items.push(cur); cur = l.replace(ITEM, ''); }
+    else if (!l) { if (cur) items.push(cur); cur = null; }
+    else if (cur != null) cur += ' ' + l;
+  }
+  if (cur) items.push(cur);
+  return items.length >= 2 ? items : [String(text || '')];
+}
+
+// A request's catalogue matches. a: what analyse() read from the whole text. A list of
+// recordings is searched item by item, then taken in turns (each item's best, then each
+// item's second…), so every item shows near the top. Mirrored by Catalog.forRequest on the phone.
+function searchRequest(catalog, text, a = heuristic(text), limit = 15) {
+  const items = requestItems(text);
+  if (items.length < 2) return catalog.search({ text: a.searchText || text, ids: a.ids, numbers: a.numbers, dates: a.dates, keywords: a.keywords }, limit);
+  const per = items.map((t) => { const h = heuristic(t); return catalog.search({ text: t, ids: h.ids, numbers: h.numbers, dates: h.dates }, limit); });
+  const cap = Math.min(30, Math.max(limit, items.length * 4));
+  const out = [];
+  const seen = new Set();
+  for (let i = 0; i < limit; i++) {
+    for (const list of per) {
+      const m = list[i];
+      const k = m && `${m.file}|${m.sheet}|${m.row}`;
+      if (m && !seen.has(k) && out.length < cap) { seen.add(k); out.push(m); }
+    }
+  }
+  return out;
+}
+
+module.exports = { analyse, heuristic, withClaude, requestItems, searchRequest };

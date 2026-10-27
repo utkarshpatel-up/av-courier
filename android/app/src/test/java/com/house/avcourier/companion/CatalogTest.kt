@@ -17,7 +17,7 @@ class CatalogTest {
 
     @Test
     fun readsWhatThePcSends() {
-        assertEquals(18, catalog.rows.size)
+        assertEquals(21, catalog.rows.size)
         assertEquals(listOf("raw", "episode"), catalog.sheets.map { it.kind })
         val row = catalog.rows.first { it.id == "DD-F-4K-3046-E" }
         assertEquals(listOf("Vatsalya" to "", "Amba Video" to "", "HDD" to "", "Disaster Recovery" to ""), catalog.backups(row))

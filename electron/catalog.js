@@ -174,6 +174,11 @@ function seriesHints(text) {
   else if (/\braw\b/i.test(t)) h.kind = 'raw';
   return h;
 }
+const SERIES_OPTIONAL = new Set(['dd', 'satsang']);
+const seriesAsked = (tok, said) => {
+  const need = [...tok].filter((t) => !SERIES_OPTIONAL.has(t));
+  return need.length ? need.every((t) => said.has(t)) : [...tok].every((t) => t === 'dd' || said.has(t));
+};
 const HINT_WORDS = new Set(['nm', 'niruma', 'dd', 'deepakbhai', 'pujyashree', 'informal', 'formal', 'master', 'mini', 'dv', 'dvcam', 'hd', '4k', 'episode', 'episodes', 'ep', 'raw']);
 
 // The recording date of a row: a date column, or Day/Month/Year columns (year 1900 = unknown).
@@ -341,7 +346,8 @@ class Catalog {
       if (exact.has(e)) { score += e.kind === 'episode' && e.ser && !e.epNo ? 120 : 200; why.push('id'); }
       if (e.folder && folders.has(e.folder)) { score += 70; why.push(`folder ${e.folder}`); }
       // Every word of the series name must be asked for: "aptavani 14" is not episode 14 of Aptavani-10(P).
-      if (e.epNo && nums.has(e.epNo) && e.seriesTok && [...e.seriesTok].every((t) => t === 'dd' || epWindow.get(e.epNo).has(t))) { score += 150; why.push(`episode ${e.epNo}`); }
+      // "DD" and "Satsang" may be left out: "Sevarthi episode 98" is DD Sevarthi Satsang 98.
+      if (e.epNo && nums.has(e.epNo) && e.seriesTok && seriesAsked(e.seriesTok, epWindow.get(e.epNo))) { score += 150; why.push(`episode ${e.epNo}`); }
       // The same folder number exists in several series: what the request says decides.
       if (e.ser) {
         for (const k of ['author', 'type', 'era']) {

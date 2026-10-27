@@ -121,6 +121,13 @@ class Catalog private constructor(val version: Long, val sheets: List<Sheet>, va
             return edits + (a.length - i) + (b.length - j) <= 1
         }
 
+        // "DD" and "Satsang" may be left out: "Sevarthi episode 98" is DD Sevarthi Satsang 98 (catalog.js seriesAsked).
+        private val SERIES_OPTIONAL = setOf("dd", "satsang")
+        fun seriesAsked(tok: Set<String>, said: Set<String>): Boolean {
+            val need = tok.filter { it !in SERIES_OPTIONAL }
+            return if (need.isNotEmpty()) need.all { it in said } else tok.all { it == "dd" || it in said }
+        }
+
         private val FOLDER_SAID = Regex("""\b(?:folder|fld|f)\s*(?:no\.?|number|#)?\s*0*(\d{1,5})\b""", I)
         private val RAW_ID = Regex("""\b[A-Z]{2,4}-[FI]-(?:HD|4K|DV)-\d{3,5}\b""", I)
         private val BARE_NUMBER = Regex("""(?:^|[\s#])0*(\d{3,4})\b""")
@@ -192,7 +199,7 @@ class Catalog private constructor(val version: Long, val sheets: List<Sheet>, va
             if (e in exact) { score += if (e.kind == "episode" && e.ser != null && e.epNo.isEmpty()) 120 else 200; why.add("id") }
             if (e.folder.isNotEmpty() && e.folder in folders) { score += 70; why.add("folder ${e.folder}") }
             // Every word of the series name must be asked for: "aptavani 14" is not episode 14 of Aptavani-10(P).
-            if (e.epNo.isNotEmpty() && e.epNo in nums && e.seriesTok != null && e.seriesTok.all { it == "dd" || epWindow[e.epNo]!!.contains(it) }) {
+            if (e.epNo.isNotEmpty() && e.epNo in nums && e.seriesTok != null && seriesAsked(e.seriesTok, epWindow[e.epNo]!!)) {
                 score += 150; why.add("episode ${e.epNo}")
             }
             // The same folder number exists in several series: what the request says decides.
@@ -226,9 +233,18 @@ class Catalog private constructor(val version: Long, val sheets: List<Sheet>, va
 
     /** Search with what Heuristic reads from a request, as the PC does for its Requests page. */
     fun forRequest(text: String, limit: Int = 15): List<Match> {
-        val h = Heuristic.heuristic(text)
-        return search(text, h.ids, h.numbers, h.dates, limit)
+        val per = forItems(text, limit)
+        if (per.size < 2) return per.firstOrNull()?.second ?: emptyList()
+        // Taken in turns (each item's best, then each item's second…), as electron/main.js matchRequest.
+        val cap = minOf(30, maxOf(limit, per.size * 4))
+        val out = LinkedHashMap<Row, Match>()
+        for (i in 0 until limit) for ((_, list) in per) if (out.size < cap) list.getOrNull(i)?.let { out.putIfAbsent(it.row, it) }
+        return out.values.toList()
     }
+
+    /** Each listed item of a request with its own matches; a request that is not a list is one item. */
+    fun forItems(text: String, limit: Int = 15): List<Pair<String, List<Match>>> =
+        Heuristic.items(text).map { t -> val h = Heuristic.heuristic(t); t to search(t, h.ids, h.numbers, h.dates, limit) }
 
     // ---------------------------------------------------------------- showing a row
     fun backups(r: Row): List<Pair<String, String>> =

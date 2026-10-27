@@ -101,8 +101,10 @@ fun AppCompatActivity.screen(body: View, back: Boolean = false) {
     WindowCompat.getInsetsController(window, root).isAppearanceLightStatusBars = false
     ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
         val i = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+        // The keyboard too, so the buttons under a text box stay reachable while typing.
+        val kb = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom
         v.setPadding(i.left, i.top, i.right, 0)
-        body.setPadding(body.paddingLeft, body.paddingTop, body.paddingRight, i.bottom)
+        body.setPadding(body.paddingLeft, body.paddingTop, body.paddingRight, maxOf(i.bottom, kb))
         insets
     }
 }
@@ -138,4 +140,17 @@ fun Activity.ask(title: String, initial: String, ok: String, multiLine: Boolean 
     AlertDialog.Builder(this).setTitle(title).setView(wrap)
         .setPositiveButton(ok) { _, _ -> onOk(box.text.toString()) }
         .setNegativeButton("Cancel", null).show()
+}
+
+/** One catalogue row: what it is, when and where, and its backup columns ("—" when empty). */
+fun Context.matchCard(c: Catalog, m: Catalog.Match): View {
+    val r = m.row
+    val where = c.backups(r).joinToString(" · ") { (k, v) -> "$k: ${v.ifEmpty { "—" }}" }.ifEmpty { "no backup columns" }
+    return card(
+        label(listOf(c.heading(r), r.id).filter { it.isNotEmpty() }.joinToString(" · "), bold = true),
+        label(listOf(if (r.folder.isNotEmpty()) "Folder ${r.folder}" else "", r.date, r.place).filter { it.isNotEmpty() }.joinToString(" · "), 13f),
+        label(listOf(r.title, if (r.event.isNotEmpty() && r.event != r.title) "(${r.event})" else "").filter { it.isNotEmpty() }.joinToString(" "), 13f),
+        label(where, 13f, muted = true),
+        label("why: ${m.why.joinToString(" ").ifEmpty { "words" }} · row ${r.rowNo}", 11f, muted = true),
+    )
 }
