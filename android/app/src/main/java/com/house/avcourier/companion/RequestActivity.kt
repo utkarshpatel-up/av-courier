@@ -57,6 +57,8 @@ class RequestActivity : AppCompatActivity() {
             val backups = c.backups(r)
             JSONObject().put("line", c.line(r)).put("title", r.title).put("id", r.id).put("folder", r.folder)
                 .put("kind", r.kind).put("series", r.series).put("episodeNo", r.epNo).put("rawId", r.rawId)
+                .put("event", r.event).put("date", r.date).put("place", r.place).put("seriesLabel", r.seriesLabel)
+                .put("why", JSONArray(m.why)).put("row", r.rowNo)
                 .put("backups", JSONArray(backups.map { it.first }))
                 .put("locations", JSONArray(backups.filter { it.second.isNotEmpty() }.map { JSONObject().put("label", it.first).put("value", it.second) }))
                 .put("local", true)
@@ -82,14 +84,7 @@ class RequestActivity : AppCompatActivity() {
         val ms = matches
         if (ms.isNotEmpty()) {
             content.addView(label("In the catalogue", 17f, bold = true))
-            ms.forEachIndexed { i, m ->
-                val box = CheckBox(this).apply {
-                    this.text = "${m.str("line").ifBlank { m.str("title") }}\n${whereText(m)}"
-                    isChecked = i in checked
-                    setOnCheckedChangeListener { _, on -> if (on) checked.add(i) else checked.remove(i) }
-                }
-                content.addView(box)
-            }
+            ms.forEachIndexed { i, m -> content.addView(matchCard(i, m)) }
         } else if (pcId != null || app.pc.catalog != null) {
             content.addView(label("No catalogue match. Try the Find tab, or reply “not found”.", muted = true))
         }
@@ -122,11 +117,36 @@ class RequestActivity : AppCompatActivity() {
         }
     }
 
-    private fun whereText(m: JSONObject): String {
-        val backups = backupText(m)
-        val f = m.optJSONArray("found").objects().firstOrNull()
-            ?: return if (m.optBoolean("local")) backups.ifEmpty { "No backup columns" }
-            else listOf("Not on a connected drive", backups).filter { it.isNotEmpty() }.joinToString("\n")
+    /**
+     * One match as on the Find tab: what it is, when and where, its backup columns and, from
+     * the PC, whether it is on a connected drive. Tick it (or tap the card) to copy or reply.
+     */
+    private fun matchCard(i: Int, m: JSONObject): android.view.View {
+        val heading = if (m.str("kind") == "episode") "Episode · ${m.str("series")} ${m.str("episodeNo")}".trim() else m.str("seriesLabel")
+        val box = CheckBox(this).apply {
+            text = listOf(heading, m.str("id")).filter { it.isNotEmpty() }.joinToString(" · ").ifEmpty { m.str("title") }
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            isChecked = i in checked
+            setOnCheckedChangeListener { _, on -> if (on) checked.add(i) else checked.remove(i) }
+        }
+        val title = m.str("title")
+        val what = listOf(title, m.str("event").takeIf { it.isNotEmpty() && it != title }?.let { "($it)" }.orEmpty()).filter { it.isNotEmpty() }.joinToString(" ")
+        val why = m.optJSONArray("why")?.let { a -> (0 until a.length()).map { a.optString(it) } }.orEmpty()
+        val views = listOfNotNull(
+            box,
+            label(listOf(if (m.str("folder").isNotEmpty()) "Folder ${m.str("folder")}" else "", m.str("date"), m.str("place")).filter { it.isNotEmpty() }.joinToString(" · "), 13f),
+            what.takeIf { it.isNotEmpty() }?.let { label(it, 13f) },
+            label(backupText(m).ifEmpty { "No backup columns" }, 13f, muted = true),
+            diskText(m)?.let { label(it, 13f, bold = true) },
+            label("why: ${why.joinToString(" ").ifEmpty { "words" }}${if (m.optInt("row") > 0) " · row ${m.optInt("row")}" else ""}", 11f, muted = true),
+        )
+        return card(*views.toTypedArray()) { box.isChecked = !box.isChecked }
+    }
+
+    /** From the PC: is it on a drive or tape it can see? (The phone itself cannot tell.) */
+    private fun diskText(m: JSONObject): String? {
+        if (m.optBoolean("local")) return null
+        val f = m.optJSONArray("found").objects().firstOrNull() ?: return "Not on a connected drive"
         return when {
             f.optBoolean("offline") -> "Tape ${f.str("tape")} · not loaded"
             f.str("tape").isNotEmpty() -> "On tape ${f.str("tape")}"
