@@ -1,0 +1,1202 @@
+[
+ {
+  "mode": "find",
+  "q": "folder 3046",
+  "results": [
+   {
+    "id": "DD-F-4K-3046-E",
+    "score": 70,
+    "why": [
+     "folder 3046"
+    ]
+   }
+  ]
+ },
+ {
+  "mode": "find",
+  "q": "DD-F-4K-3034-E",
+  "results": [
+   {
+    "id": "DD-F-4K-3034-E",
+    "score": 230,
+    "why": [
+     "id",
+     "DD",
+     "HD"
+    ]
+   },
+   {
+    "id": "Aptavani-14-B2_000014",
+    "score": 230,
+    "why": [
+     "id",
+     "DD",
+     "HD"
+    ]
+   },
+   {
+    "id": "DD-F-4K-3046-E",
+    "score": 30,
+    "why": [
+     "DD",
+     "HD"
+    ]
+   },
+   {
+    "id": "DD-F-HD-3050-E",
+    "score": 30,
+    "why": [
+     "DD",
+     "HD"
+    ]
+   },
+   {
+    "id": "DD-I-HD-2616-1",
+    "score": 30,
+    "why": [
+     "DD",
+     "HD"
+    ]
+   },
+   {
+    "id": "DD-I-HD-1543-1",
+    "score": 30,
+    "why": [
+     "DD",
+     "HD"
+    ]
+   },
+   {
+    "id": "DD-F-HD-1469-E",
+    "score": 30,
+    "why": [
+     "DD",
+     "HD"
+    ]
+   },
+   {
+    "id": "DD-I-HD-2422-1",
+    "score": 30,
+    "why": [
+     "DD",
+     "HD"
+    ]
+   },
+   {
+    "id": "DD-I-HD-1888-4",
+    "score": 30,
+    "why": [
+     "DD",
+     "HD"
+    ]
+   },
+   {
+    "id": "DD-F-HD-1796-E",
+    "score": 30,
+    "why": [
+     "DD",
+     "HD"
+    ]
+   },
+   {
+    "id": "DD-F-HD-1260-E1",
+    "score": 30,
+    "why": [
+     "DD",
+     "HD"
+    ]
+   },
+   {
+    "id": "DD Vitraag_002350",
+    "score": 30,
+    "why": [
+     "DD",
+     "HD"
+    ]
+   },
+   {
+    "id": "DD Vitraag_006955",
+    "score": 30,
+    "why": [
+     "DD",
+     "HD"
+    ]
+   },
+   {
+    "id": "DD Hindi_000953",
+    "score": 30,
+    "why": [
+     "DD",
+     "HD"
+    ]
+   },
+   {
+    "id": "Aptavani-10(P)_000014",
+    "score": 30,
+    "why": [
+     "DD",
+     "HD"
+    ]
+   }
+  ]
+ },
+ {
+  "mode": "find",
+  "q": "dd f 4k 3034 e",
+  "results": [
+   {
+    "id": "DD-F-4K-3034-E",
+    "score": 300,
+    "why": [
+     "id",
+     "folder 3034",
+     "DD",
+     "HD"
+    ]
+   },
+   {
+    "id": "Aptavani-14-B2_000014",
+    "score": 230,
+    "why": [
+     "id",
+     "DD",
+     "HD"
+    ]
+   },
+   {
+    "id": "DD-F-4K-3046-E",
+    "score": 30,
+    "why": [
+     "DD",
+     "HD"
+    ]
+   },
+   {
+    "id": "DD-F-HD-3050-E",
+    "score": 30,
+    "why": [
+     "DD",
+     "HD"
+    ]
+   },
+   {
+    "id": "DD-I-HD-2616-1",
+    "score": 30,
+    "why": [
+     "DD",
+     "HD"
+    ]
+   },
+   {
+    "id": "DD-I-HD-1543-1",
+    "score": 30,
+    "why": [
+     "DD",
+     "HD"
+    ]
+   },
+   {
+    "id": "DD-F-HD-1469-E",
+    "score": 30,
+    "why": [
+     "DD",
+     "HD"
+    ]
+   },
+   {
+    "id": "DD-I-HD-2422-1",
+    "score": 30,
+    "why": [
+     "DD",
+     "HD"
+    ]
+   },
+   {
+    "id": "DD-I-HD-1888-4",
+    "score": 30,
+    "why": [
+     "DD",
+     "HD"
+    ]
+   },
+   {
+    "id": "DD-F-HD-1796-E",
+    "score": 30,
+    "why": [
+     "DD",
+     "HD"
+    ]
+   },
+   {
+    "id": "DD-F-HD-1260-E1",
+    "score": 30,
+    "why": [
+     "DD",
+     "HD"
+    ]
+   },
+   {
+    "id": "DD Vitraag_002350",
+    "score": 30,
+    "why": [
+     "DD",
+     "HD"
+    ]
+   },
+   {
+    "id": "DD Vitraag_006955",
+    "score": 30,
+    "why": [
+     "DD",
+     "HD"
+    ]
+   },
+   {
+    "id": "DD Hindi_000953",
+    "score": 30,
+    "why": [
+     "DD",
+     "HD"
+    ]
+   },
+   {
+    "id": "Aptavani-10(P)_000014",
+    "score": 30,
+    "why": [
+     "DD",
+     "HD"
+    ]
+   }
+  ]
+ },
+ {
+  "mode": "find",
+  "q": "master ssd 123",
+  "results": [
+   {
+    "id": "DD-F-4K-3034-E",
+    "score": 95,
+    "why": [
+     "F",
+     "ssd123",
+     "d:123"
+    ]
+   },
+   {
+    "id": "DD-F-4K-3046-E",
+    "score": 15,
+    "why": [
+     "F"
+    ]
+   },
+   {
+    "id": "DD-F-HD-3050-E",
+    "score": 15,
+    "why": [
+     "F"
+    ]
+   },
+   {
+    "id": "DD-F-HD-1469-E",
+    "score": 15,
+    "why": [
+     "F"
+    ]
+   },
+   {
+    "id": "NM-F-DV-0418-E2",
+    "score": 15,
+    "why": [
+     "F"
+    ]
+   },
+   {
+    "id": "DD-F-DV-0418-E1",
+    "score": 15,
+    "why": [
+     "F"
+    ]
+   },
+   {
+    "id": "DD-F-HD-1796-E",
+    "score": 15,
+    "why": [
+     "F"
+    ]
+   },
+   {
+    "id": "DD-F-HD-1260-E1",
+    "score": 15,
+    "why": [
+     "F"
+    ]
+   },
+   {
+    "id": "DD Vitraag_002350",
+    "score": 15,
+    "why": [
+     "F"
+    ]
+   },
+   {
+    "id": "DD Vitraag_006955",
+    "score": 15,
+    "why": [
+     "F"
+    ]
+   },
+   {
+    "id": "DD Hindi_000953",
+    "score": 15,
+    "why": [
+     "F"
+    ]
+   },
+   {
+    "id": "Aptavani-14-B2_000014",
+    "score": 15,
+    "why": [
+     "F"
+    ]
+   },
+   {
+    "id": "Aptavani-10(P)_000014",
+    "score": 15,
+    "why": [
+     "F"
+    ]
+   }
+  ]
+ },
+ {
+  "mode": "find",
+  "q": "lto 002",
+  "results": [
+   {
+    "id": "NM-I-DV-0196-1",
+    "score": 80,
+    "why": [
+     "lto2",
+     "t:2"
+    ]
+   },
+   {
+    "id": "Aptavani-10(P)_000014",
+    "score": 80,
+    "why": [
+     "lto2",
+     "t:2"
+    ]
+   },
+   {
+    "id": "DD-I-HD-1543-1",
+    "score": 10,
+    "why": []
+   },
+   {
+    "id": "DD-F-HD-1260-E1",
+    "score": 10,
+    "why": []
+   },
+   {
+    "id": "DD Vitraag_002350",
+    "score": 10,
+    "why": []
+   },
+   {
+    "id": "DD Vitraag_006955",
+    "score": 10,
+    "why": []
+   }
+  ]
+ },
+ {
+  "mode": "find",
+  "q": "navratri garba 2026",
+  "results": [
+   {
+    "id": "DD-F-HD-3050-E",
+    "score": 62,
+    "why": [
+     "2026"
+    ]
+   },
+   {
+    "id": "DD-F-4K-3046-E",
+    "score": 20,
+    "why": [
+     "2026"
+    ]
+   },
+   {
+    "id": "DD-I-HD-2616-1",
+    "score": 20,
+    "why": [
+     "2026"
+    ]
+   },
+   {
+    "id": "DD-F-4K-3034-E",
+    "score": 20,
+    "why": [
+     "2026"
+    ]
+   },
+   {
+    "id": "Aptavani-14-B2_000014",
+    "score": 20,
+    "why": [
+     "2026"
+    ]
+   }
+  ]
+ },
+ {
+  "mode": "find",
+  "q": "gurupurnima 2019 adalaj",
+  "results": [
+   {
+    "id": "DD-F-HD-1469-E",
+    "score": 56,
+    "why": [
+     "2019"
+    ]
+   },
+   {
+    "id": "DD-I-HD-1543-1",
+    "score": 36,
+    "why": [
+     "2019"
+    ]
+   },
+   {
+    "id": "DD Hindi_000953",
+    "score": 30,
+    "why": [
+     "2019"
+    ]
+   },
+   {
+    "id": "DD-F-HD-3050-E",
+    "score": 2,
+    "why": []
+   },
+   {
+    "id": "DD-I-HD-2616-1",
+    "score": 2,
+    "why": []
+   },
+   {
+    "id": "DD-F-4K-3034-E",
+    "score": 2,
+    "why": []
+   },
+   {
+    "id": "DD-I-HD-2422-1",
+    "score": 2,
+    "why": []
+   },
+   {
+    "id": "DD-I-HD-1888-4",
+    "score": 2,
+    "why": []
+   },
+   {
+    "id": "DD-F-HD-1796-E",
+    "score": 2,
+    "why": []
+   },
+   {
+    "id": "DD Vitraag_006955",
+    "score": 2,
+    "why": []
+   },
+   {
+    "id": "Aptavani-14-B2_000014",
+    "score": 2,
+    "why": []
+   },
+   {
+    "id": "Aptavani-10(P)_000014",
+    "score": 2,
+    "why": []
+   }
+  ]
+ },
+ {
+  "mode": "find",
+  "q": "nm mini dv 196",
+  "results": [
+   {
+    "id": "NM-I-DV-0196-1",
+    "score": 115,
+    "why": [
+     "folder 196",
+     "NM",
+     "I",
+     "DV"
+    ]
+   },
+   {
+    "id": "NM-F-DV-0418-E2",
+    "score": 5,
+    "why": [
+     "NM",
+     "DV"
+    ]
+   }
+  ]
+ },
+ {
+  "mode": "find",
+  "q": "NM master 418",
+  "results": [
+   {
+    "id": "NM-F-DV-0418-E2",
+    "score": 100,
+    "why": [
+     "folder 418",
+     "NM",
+     "F"
+    ]
+   },
+   {
+    "id": "DD-F-DV-0418-E1",
+    "score": 60,
+    "why": [
+     "folder 418",
+     "F"
+    ]
+   }
+  ]
+ },
+ {
+  "mode": "find",
+  "q": "DD Vitraag 2350",
+  "results": [
+   {
+    "id": "DD Vitraag_002350",
+    "score": 175,
+    "why": [
+     "episode 2350",
+     "DD"
+    ]
+   },
+   {
+    "id": "DD Vitraag_006955",
+    "score": 25,
+    "why": [
+     "DD"
+    ]
+   },
+   {
+    "id": "DD-F-4K-3046-E",
+    "score": 15,
+    "why": [
+     "DD"
+    ]
+   },
+   {
+    "id": "DD-F-HD-3050-E",
+    "score": 15,
+    "why": [
+     "DD"
+    ]
+   },
+   {
+    "id": "DD-I-HD-2616-1",
+    "score": 15,
+    "why": [
+     "DD"
+    ]
+   },
+   {
+    "id": "DD-F-4K-3034-E",
+    "score": 15,
+    "why": [
+     "DD"
+    ]
+   },
+   {
+    "id": "DD-I-HD-1543-1",
+    "score": 15,
+    "why": [
+     "DD"
+    ]
+   },
+   {
+    "id": "DD-F-HD-1469-E",
+    "score": 15,
+    "why": [
+     "DD"
+    ]
+   },
+   {
+    "id": "DD-F-DV-0418-E1",
+    "score": 15,
+    "why": [
+     "DD"
+    ]
+   },
+   {
+    "id": "DD-I-HD-2422-1",
+    "score": 15,
+    "why": [
+     "DD"
+    ]
+   },
+   {
+    "id": "DD-I-HD-1888-4",
+    "score": 15,
+    "why": [
+     "DD"
+    ]
+   },
+   {
+    "id": "DD-F-HD-1796-E",
+    "score": 15,
+    "why": [
+     "DD"
+    ]
+   },
+   {
+    "id": "DD-F-HD-1260-E1",
+    "score": 15,
+    "why": [
+     "DD"
+    ]
+   },
+   {
+    "id": "DD Hindi_000953",
+    "score": 15,
+    "why": [
+     "DD"
+    ]
+   },
+   {
+    "id": "Aptavani-14-B2_000014",
+    "score": 15,
+    "why": [
+     "DD"
+    ]
+   },
+   {
+    "id": "Aptavani-10(P)_000014",
+    "score": 15,
+    "why": [
+     "DD"
+    ]
+   }
+  ]
+ },
+ {
+  "mode": "find",
+  "q": "Aptavani-14-B2 episode 14",
+  "results": [
+   {
+    "id": "Aptavani-14-B2_000014",
+    "score": 196,
+    "why": [
+     "episode 14"
+    ]
+   }
+  ]
+ },
+ {
+  "mode": "find",
+  "q": "aptavani 14",
+  "results": [
+   {
+    "id": "DD-F-4K-3034-E",
+    "score": 16,
+    "why": []
+   },
+   {
+    "id": "Aptavani-14-B2_000014",
+    "score": 16,
+    "why": []
+   },
+   {
+    "id": "Aptavani-10(P)_000014",
+    "score": 16,
+    "why": []
+   }
+  ]
+ },
+ {
+  "mode": "find",
+  "q": "trimandir making",
+  "results": [
+   {
+    "id": "DD-I-HD-2422-1",
+    "score": 42,
+    "why": []
+   },
+   {
+    "id": "DD-I-HD-1888-4",
+    "score": 16,
+    "why": []
+   }
+  ]
+ },
+ {
+  "mode": "find",
+  "q": "making of sankul bulding",
+  "results": [
+   {
+    "id": "DD-I-HD-1888-4",
+    "score": 46,
+    "why": []
+   },
+   {
+    "id": "DD-I-HD-2422-1",
+    "score": 16,
+    "why": []
+   },
+   {
+    "id": "DD-I-HD-2616-1",
+    "score": 10,
+    "why": []
+   }
+  ]
+ },
+ {
+  "mode": "find",
+  "q": "HDD-0124",
+  "results": [
+   {
+    "id": "DD-F-HD-1260-E1",
+    "score": 80,
+    "why": [
+     "hdd124",
+     "d:124"
+    ]
+   },
+   {
+    "id": "DD-F-4K-3034-E",
+    "score": 10,
+    "why": []
+   }
+  ]
+ },
+ {
+  "mode": "find",
+  "q": "drive 124",
+  "results": [
+   {
+    "id": "DD-F-HD-1260-E1",
+    "score": 30,
+    "why": [
+     "d:124"
+    ]
+   }
+  ]
+ },
+ {
+  "mode": "find",
+  "q": "sevarthi satsang feb 2021",
+  "results": [
+   {
+    "id": "DD-F-HD-1796-E",
+    "score": 67,
+    "why": [
+     "2021-02"
+    ]
+   },
+   {
+    "id": "DD Vitraag_006955",
+    "score": 25,
+    "why": [
+     "2021-02"
+    ]
+   },
+   {
+    "id": "DD-F-4K-3046-E",
+    "score": 8,
+    "why": []
+   },
+   {
+    "id": "DD-I-HD-2616-1",
+    "score": 8,
+    "why": []
+   },
+   {
+    "id": "NM-F-DV-0418-E2",
+    "score": 8,
+    "why": []
+   }
+  ]
+ },
+ {
+  "mode": "find",
+  "q": "satsang hong kong",
+  "results": [
+   {
+    "id": "DD-F-4K-3046-E",
+    "score": 46,
+    "why": []
+   },
+   {
+    "id": "DD-I-HD-2616-1",
+    "score": 16,
+    "why": []
+   },
+   {
+    "id": "NM-F-DV-0418-E2",
+    "score": 16,
+    "why": []
+   },
+   {
+    "id": "DD-F-HD-1796-E",
+    "score": 16,
+    "why": []
+   }
+  ]
+ },
+ {
+  "mode": "find",
+  "q": "folder 3099 making",
+  "results": []
+ },
+ {
+  "mode": "find",
+  "q": "DD-F-HD-1796-E",
+  "results": [
+   {
+    "id": "DD-F-HD-1796-E",
+    "score": 230,
+    "why": [
+     "id",
+     "DD",
+     "HD"
+    ]
+   },
+   {
+    "id": "DD Vitraag_006955",
+    "score": 230,
+    "why": [
+     "id",
+     "DD",
+     "HD"
+    ]
+   },
+   {
+    "id": "DD-F-4K-3046-E",
+    "score": 30,
+    "why": [
+     "DD",
+     "HD"
+    ]
+   },
+   {
+    "id": "DD-F-HD-3050-E",
+    "score": 30,
+    "why": [
+     "DD",
+     "HD"
+    ]
+   },
+   {
+    "id": "DD-I-HD-2616-1",
+    "score": 30,
+    "why": [
+     "DD",
+     "HD"
+    ]
+   },
+   {
+    "id": "DD-F-4K-3034-E",
+    "score": 30,
+    "why": [
+     "DD",
+     "HD"
+    ]
+   },
+   {
+    "id": "DD-I-HD-1543-1",
+    "score": 30,
+    "why": [
+     "DD",
+     "HD"
+    ]
+   },
+   {
+    "id": "DD-F-HD-1469-E",
+    "score": 30,
+    "why": [
+     "DD",
+     "HD"
+    ]
+   },
+   {
+    "id": "DD-I-HD-2422-1",
+    "score": 30,
+    "why": [
+     "DD",
+     "HD"
+    ]
+   },
+   {
+    "id": "DD-I-HD-1888-4",
+    "score": 30,
+    "why": [
+     "DD",
+     "HD"
+    ]
+   },
+   {
+    "id": "DD-F-HD-1260-E1",
+    "score": 30,
+    "why": [
+     "DD",
+     "HD"
+    ]
+   },
+   {
+    "id": "DD Vitraag_002350",
+    "score": 30,
+    "why": [
+     "DD",
+     "HD"
+    ]
+   },
+   {
+    "id": "DD Hindi_000953",
+    "score": 30,
+    "why": [
+     "DD",
+     "HD"
+    ]
+   },
+   {
+    "id": "Aptavani-14-B2_000014",
+    "score": 30,
+    "why": [
+     "DD",
+     "HD"
+    ]
+   },
+   {
+    "id": "Aptavani-10(P)_000014",
+    "score": 30,
+    "why": [
+     "DD",
+     "HD"
+    ]
+   }
+  ]
+ },
+ {
+  "mode": "request",
+  "q": "Raw data requirement\n\nNeed raw folder 3046 for making prachaar video",
+  "results": [
+   {
+    "id": "DD-F-4K-3046-E",
+    "score": 80,
+    "why": [
+     "folder 3046"
+    ]
+   }
+  ]
+ },
+ {
+  "mode": "request",
+  "q": "Please send DD-F-4K-3034-E",
+  "results": [
+   {
+    "id": "DD-F-4K-3034-E",
+    "score": 230,
+    "why": [
+     "id",
+     "DD",
+     "HD"
+    ]
+   },
+   {
+    "id": "Aptavani-14-B2_000014",
+    "score": 230,
+    "why": [
+     "id",
+     "DD",
+     "HD"
+    ]
+   },
+   {
+    "id": "DD-F-4K-3046-E",
+    "score": 30,
+    "why": [
+     "DD",
+     "HD"
+    ]
+   },
+   {
+    "id": "DD-F-HD-3050-E",
+    "score": 30,
+    "why": [
+     "DD",
+     "HD"
+    ]
+   },
+   {
+    "id": "DD-I-HD-2616-1",
+    "score": 30,
+    "why": [
+     "DD",
+     "HD"
+    ]
+   },
+   {
+    "id": "DD-I-HD-1543-1",
+    "score": 30,
+    "why": [
+     "DD",
+     "HD"
+    ]
+   },
+   {
+    "id": "DD-F-HD-1469-E",
+    "score": 30,
+    "why": [
+     "DD",
+     "HD"
+    ]
+   },
+   {
+    "id": "DD-I-HD-2422-1",
+    "score": 30,
+    "why": [
+     "DD",
+     "HD"
+    ]
+   },
+   {
+    "id": "DD-I-HD-1888-4",
+    "score": 30,
+    "why": [
+     "DD",
+     "HD"
+    ]
+   },
+   {
+    "id": "DD-F-HD-1796-E",
+    "score": 30,
+    "why": [
+     "DD",
+     "HD"
+    ]
+   },
+   {
+    "id": "DD-F-HD-1260-E1",
+    "score": 30,
+    "why": [
+     "DD",
+     "HD"
+    ]
+   },
+   {
+    "id": "DD Vitraag_002350",
+    "score": 30,
+    "why": [
+     "DD",
+     "HD"
+    ]
+   },
+   {
+    "id": "DD Vitraag_006955",
+    "score": 30,
+    "why": [
+     "DD",
+     "HD"
+    ]
+   },
+   {
+    "id": "DD Hindi_000953",
+    "score": 30,
+    "why": [
+     "DD",
+     "HD"
+    ]
+   },
+   {
+    "id": "Aptavani-10(P)_000014",
+    "score": 30,
+    "why": [
+     "DD",
+     "HD"
+    ]
+   }
+  ]
+ },
+ {
+  "mode": "request",
+  "q": "Bhai folder 2616 no data joie che",
+  "results": [
+   {
+    "id": "DD-I-HD-2616-1",
+    "score": 70,
+    "why": [
+     "folder 2616"
+    ]
+   }
+  ]
+ },
+ {
+  "mode": "request",
+  "q": "Vitraag episode 2350 mokalo",
+  "results": [
+   {
+    "id": "DD Vitraag_002350",
+    "score": 170,
+    "why": [
+     "episode 2350"
+    ]
+   }
+  ]
+ },
+ {
+  "mode": "request",
+  "q": "Gurupurnima 2019 Chicago ni recording bhejo",
+  "results": [
+   {
+    "id": "DD-I-HD-1543-1",
+    "score": 46,
+    "why": [
+     "2019"
+    ]
+   },
+   {
+    "id": "DD-F-HD-1469-E",
+    "score": 36,
+    "why": [
+     "2019"
+    ]
+   },
+   {
+    "id": "DD Hindi_000953",
+    "score": 20,
+    "why": [
+     "2019"
+    ]
+   }
+  ]
+ },
+ {
+  "mode": "request",
+  "q": "drive no 124 ma shu che?",
+  "results": [
+   {
+    "id": "DD-F-HD-1260-E1",
+    "score": 50,
+    "why": [
+     "d:124",
+     "#124"
+    ]
+   }
+  ]
+ },
+ {
+  "mode": "request",
+  "q": "Need raw folder 3099 for making prachaar video",
+  "results": []
+ }
+]

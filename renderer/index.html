@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' file: data:; style-src 'self' 'unsafe-inline'">
+  <title>AV Courier</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="logo">AC</div>
+      <div><div class="brand-name">AV Courier</div><div class="brand-sub">Copy · Find · Tell</div></div>
+    </div>
+    <nav id="nav">
+      <button class="nav" data-page="queue">Copy Queue <span class="pill" id="nav-queue"></span></button>
+      <button class="nav" data-page="requests">Requests <span class="pill hot" id="nav-requests"></span></button>
+      <button class="nav" data-page="find">Find Data</button>
+      <button class="nav" data-page="channels">Channels</button>
+      <button class="nav" data-page="settings">Settings</button>
+      <button class="nav" data-page="activity">Activity</button>
+    </nav>
+    <div class="sidebar-foot" id="foot"></div>
+  </aside>
+
+  <main>
+    <!-- ============================================================ QUEUE -->
+    <section class="page" id="page-queue">
+      <div class="title-row">
+        <h1>Copy Queue</h1>
+        <div class="row">
+          <button class="btn" id="q-pause">Pause</button>
+          <button class="btn ghost" id="q-clear">Clear finished</button>
+          <button class="btn primary" id="q-new">+ New copy</button>
+        </div>
+      </div>
+
+      <div class="card now" id="q-now"></div>
+      <div id="q-jobs"></div>
+      <div class="drop" id="q-drop">Drop files or folders here to start a new copy</div>
+    </section>
+
+    <!-- ============================================================ REQUESTS -->
+    <section class="page" id="page-requests">
+      <div class="title-row">
+        <h1>Requests</h1>
+        <div class="row">
+          <button class="btn" id="r-import-wa" title="Turns the chat open in the WhatsApp window (with its pictures) into a request">From open WhatsApp chat</button>
+          <button class="btn primary" id="r-new">+ Add request</button>
+        </div>
+      </div>
+      <div class="tabs" id="r-tabs">
+        <button data-f="open" class="active">Open</button>
+        <button data-f="maybe">Maybe</button>
+        <button data-f="progress">In progress</button>
+        <button data-f="done">Done</button>
+        <button data-f="all">All</button>
+      </div>
+      <div class="row" id="r-bulk" style="display:none;margin-bottom:8px"></div>
+      <div class="split">
+        <div class="list" id="r-list"></div>
+        <div class="detail" id="r-detail"><div class="empty">Select a request</div></div>
+      </div>
+    </section>
+
+    <!-- ============================================================ FIND -->
+    <section class="page" id="page-find">
+      <div class="title-row">
+        <h1>Find Data</h1>
+        <button class="btn" id="f-import">Import catalogue (Excel)</button>
+      </div>
+      <div class="card" id="f-stats"></div>
+      <input class="search" id="f-q" placeholder="Drive or tape number, event, place, date… e.g. “janmashtami ahmedabad 16 aug”, “HDD 123”, “LTO 45”" autofocus>
+      <div id="f-results"></div>
+    </section>
+
+    <!-- ============================================================ CHANNELS -->
+    <section class="page" id="page-channels">
+      <h1>Channels</h1>
+      <div class="card">
+        <div class="card-head"><h2>WhatsApp</h2><span class="badge" id="wa-status"></span></div>
+        <p class="muted">WhatsApp Web runs inside AV Courier. Link it once with the QR code (WhatsApp on your phone → Linked devices). Incoming messages are read from WhatsApp’s notifications and unread chats; replies are typed into the chat for you. Muted chats do not raise notifications.</p>
+        <div class="row">
+          <label class="switch"><input type="checkbox" id="wa-enabled"> Watch WhatsApp</label>
+          <button class="btn" id="wa-show">Open WhatsApp window</button>
+          <input id="wa-test-chat" placeholder="Chat name for a test">
+          <button class="btn ghost" id="wa-test">Send test</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>Gmail</h2><span class="badge" id="gm-status"></span></div>
+        <p class="muted">Replies go into the same email thread. Log in with a Google App Password (Google Account → Security → App passwords), or sign in with Google when App Passwords are not allowed on a work account.</p>
+        <div class="row" style="margin-bottom:8px">
+          <label>Log in with
+            <select id="gm-login">
+              <option value="password">App Password</option>
+              <option value="google">Sign in with Google</option>
+            </select>
+          </label>
+        </div>
+        <div id="gm-google" style="display:none;margin-bottom:10px">
+          <p class="small muted">Needs a one-time “Desktop app” OAuth client from your organisation’s Google Cloud (steps in the README, section <i>Sign in with Google</i>). Load the JSON file you downloaded for it (or paste its ID and secret), then sign in: Google’s page opens in your browser and AV Courier never sees your password.</p>
+          <div class="grid2">
+            <label>OAuth client ID<input id="gm-cid" placeholder="1234…apps.googleusercontent.com"></label>
+            <label>OAuth client secret<input id="gm-csecret" type="password" placeholder="GOCSPX-…"></label>
+          </div>
+          <div class="row">
+            <button class="btn" id="gm-json">Load from JSON file…</button>
+            <button class="btn primary" id="gm-signin">Sign in with Google</button>
+            <button class="btn ghost" id="gm-signout">Sign out</button>
+            <span class="small" id="gm-who"></span>
+          </div>
+        </div>
+        <div class="grid2">
+          <label id="gm-user-wrap">Gmail address<input id="gm-user" placeholder="you@gmail.com"></label>
+          <label id="gm-pass-wrap">App Password<input id="gm-pass" type="password" placeholder="saved — type to replace"></label>
+          <label>Folder / label to watch<input id="gm-folder" placeholder="INBOX"></label>
+          <label>Check every (minutes)<input id="gm-interval" type="number" min="1"></label>
+          <label class="wide">Only from these domains (optional)<input id="gm-domains" placeholder="e.g. company.org, studio.in"></label>
+        </div>
+        <div class="row">
+          <label class="switch"><input type="checkbox" id="gm-watch"> Watch for requests</label>
+          <button class="btn" id="gm-save">Save</button>
+          <button class="btn ghost" id="gm-check">Check now</button>
+          <button class="btn ghost" id="gm-test">Send test email to me</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>Claude (reads requests and screenshots)</h2><span class="badge" id="ai-status"></span></div>
+        <p class="muted">Optional. Without it, requests are read with patterns (drive/tape numbers, dates, key words). With it, loosely written requests, mixed languages and pictures (posters, screenshots, programme lists) are understood too. Only the request text and its pictures are sent; the catalogue stays on this PC.</p>
+        <div class="row">
+          <input id="ai-key" type="password" placeholder="Anthropic API key — saved encrypted" style="flex:1">
+          <label class="switch"><input type="checkbox" id="ai-enabled"> Use Claude</label>
+          <button class="btn" id="ai-save">Save</button>
+          <button class="btn ghost" id="ai-test">Test</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================ SETTINGS -->
+    <section class="page" id="page-settings">
+      <h1>Settings</h1>
+      <div class="card">
+        <h2>Copying</h2>
+        <div class="grid2">
+          <label>When a file already exists
+            <select id="s-conflict">
+              <option value="skip-same">Skip if identical, otherwise keep both</option>
+              <option value="skip">Always skip</option>
+              <option value="overwrite">Overwrite</option>
+              <option value="rename">Always keep both</option>
+            </select>
+          </label>
+          <label>Buffer size (MB)<input id="s-buffer" type="number" min="1" max="64"></label>
+          <label class="switch"><input type="checkbox" id="s-verify"> Verify every file after copying (MD5)</label>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Telling people</h2>
+        <label class="switch"><input type="checkbox" id="s-autosend"> Send the “ready” message automatically when a copy finishes</label>
+        <p class="muted">Placeholders: {name} {job} {files} {size} {dest} {done} {failed} {rows} {query}</p>
+        <label>Copy finished<textarea id="t-copyDone" rows="3"></textarea></label>
+        <label>Copy had errors<textarea id="t-copyFailed" rows="2"></textarea></label>
+        <label>Where the data is<textarea id="t-located" rows="2"></textarea></label>
+        <label>Not found<textarea id="t-notFound" rows="2"></textarea></label>
+        <label>Remind me about unanswered requests after (minutes)<input id="s-remind" type="number" min="5"></label>
+        <button class="btn" id="s-save">Save</button>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>Phone (AV Courier for Android)</h2><span class="badge" id="ph-status"></span></div>
+        <p class="muted">Lets the Android app on the same Wi-Fi see requests, reply, queue copies and start tapes. When WhatsApp Web on this PC is not linked or fails, “data is ready” messages are handed to the phone to send. Only phones paired with a code shown here can connect; nothing is reachable from the internet.</p>
+        <div class="row">
+          <label class="switch"><input type="checkbox" id="ph-enabled"> Phone remote on</label>
+          <label>Port <input id="ph-port" type="number" min="1024" max="65535" style="width:90px"></label>
+          <button class="btn" id="ph-pair">Pair a phone…</button>
+        </div>
+        <div id="ph-pairing" class="row" style="margin-top:10px"></div>
+        <div id="ph-devices" style="margin-top:10px"></div>
+      </div>
+      <div class="card">
+        <h2>Never a request</h2>
+        <p class="muted">Messages from these are never treated as data requests, here and on the phone: WhatsApp <b>verified businesses</b> (✔, found by their badge in WhatsApp's chat list) and senders you chose to ignore (💬 WhatsApp, ✉ email). ✕ undoes one.</p>
+        <div class="row" id="ig-list"></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>Other computers</h2><span class="badge" id="sy-status"></span></div>
+        <p class="muted">Running AV Courier on more than one computer? Turn this on in each, and a request you reply to, copy or close on one shows as done on the others. Only request status is shared; each computer keeps its own queue, drives and catalogue. Keep “send automatically when a copy finishes” on for one computer only.</p>
+        <div class="row">
+          <label class="switch"><input type="checkbox" id="sy-enabled"> Share request status</label>
+          <label>This computer <input id="sy-machine" placeholder="e.g. Office PC" style="width:150px"></label>
+          <label>Through
+            <select id="sy-mode">
+              <option value="gmail">the Gmail account (Channels page)</option>
+              <option value="folder">a shared folder</option>
+            </select>
+          </label>
+        </div>
+        <p class="small muted" id="sy-gmail-note">Uses the Gmail address and App Password already saved on the Channels page: same account on every computer. Updates are kept in a Gmail label “AV Courier sync”, already read and never in the inbox. Nothing is sent to anyone, and it takes a few KB a month.</p>
+        <div class="row" id="sy-folder-row" style="margin-top:8px">
+          <input id="sy-folder" placeholder="Shared folder, e.g. G:\My Drive\AV Courier sync" style="flex:1">
+          <button class="btn ghost" id="sy-browse">Choose…</button>
+          <button class="btn ghost" id="sy-now">Check now</button>
+        </div>
+        <div class="small muted" id="sy-info" style="margin-top:8px"></div>
+      </div>
+      <div class="card">
+        <h2>Windows</h2>
+        <div class="row">
+          <button class="btn" id="s-sendto">Add “AV Courier” to Explorer’s Send to menu</button>
+          <button class="btn ghost" id="s-data">Open data folder (reports, settings)</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================ ACTIVITY -->
+    <section class="page" id="page-activity">
+      <h1>Activity</h1>
+      <div id="act"></div>
+    </section>
+  </main>
+
+  <dialog id="dlg"><form method="dialog" id="dlg-body"></form></dialog>
+  <div id="toast"></div>
+  <script src="app.js"></script>
+</body>
+</html>

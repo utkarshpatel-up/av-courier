@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The PC app is reached over plain HTTP on the home/office Wi-Fi (its address
+     is a private LAN IP, which has no TLS certificate). Every call carries the
+     per-phone token, and the PC refuses addresses outside the local network. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>
