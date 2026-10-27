@@ -80,6 +80,14 @@ because each computer catches them separately. Only request status is shared: th
 catalogue stay with their own computer. Keep **Send the “ready” message automatically** on for one computer only.
 The code is `electron/sync.js`.
 
+## Pictures (screenshots, photos of a monitor)
+
+The words in a request's pictures are read on this computer with Tesseract: offline, free, in
+English, Gujarati and Hindi (Gujarati less reliably). They go through the same pattern reader as
+typed text, and are shown under **Words read from the picture** on the request. It reads letters
+only: a poster with a picture and a styled title needs the optional Claude key. Photos of a
+monitor read best taken straight on, close, sharp and without glare.
+
 ## Phone (Android companion)
 The Android app in `android/` catches requests from the phone's own WhatsApp and Gmail notifications, hands
 them to this PC, and lets you reply, queue copies, pause/resume and start tapes from the phone. Turn it on

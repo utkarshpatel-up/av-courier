@@ -45,7 +45,24 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="avcourier" android:host="pair" />
             </intent-filter>
+            <!-- Share a picture to AV Courier: it reads the request in it. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
+            </intent-filter>
         </activity>
+
+        <!-- Photos taken with Scan a picture are written here for the camera app. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
 
         <activity
             android:name=".RequestActivity"

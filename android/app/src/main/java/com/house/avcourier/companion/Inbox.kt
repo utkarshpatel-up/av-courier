@@ -71,6 +71,8 @@ class Inbox(ctx: Context) {
     companion object {
         const val GROUP_WINDOW_MS = 10 * 60_000L
         const val MAYBE_SCORE = 15
+        /** externalId prefix of requests read from a picture (the PC keeps them whatever their score). */
+        const val SCAN = "scan:"
     }
 
     class Added(val request: LocalRequest, val announce: Boolean)
@@ -129,6 +131,22 @@ class Inbox(ctx: Context) {
         while (items.size > 500) items.removeAt(items.size - 1)
         saveLocked()
         return Added(r, h.isRequest)
+    }
+
+    /** A request read from a picture you took or picked: always kept, whatever the score. */
+    @Synchronized
+    fun addScanned(chat: String, text: String): LocalRequest {
+        val at = System.currentTimeMillis()
+        val r = LocalRequest(
+            id = UUID.randomUUID().toString().take(12), channel = "whatsapp", pkg = "com.whatsapp", chat = chat, sender = chat,
+            subject = "", text = text, receivedAt = at, lastAt = at, score = Heuristic.heuristic(text).score,
+            status = "new", pcId = null, remindedAt = 0,
+            pending = mutableListOf(Pending("$SCAN$at", text, at)),
+            history = mutableListOf("Read from a picture on the phone"),
+        )
+        items.add(0, r)
+        saveLocked()
+        return r
     }
 
     @Synchronized

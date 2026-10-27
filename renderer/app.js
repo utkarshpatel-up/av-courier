@@ -339,6 +339,7 @@ function renderRequestDetail() {
     <div class="small">${new Date(r.receivedAt).toLocaleString()}${r.from.address ? ' · ' + esc(r.from.address) : ''}${r.from.chat && r.from.chat !== r.from.name ? ' · chat ' + esc(r.from.chat) : ''}</div>
     <div class="msg">${esc(r.text)}</div>
     ${r.images?.length ? `<div class="thumbs">${r.images.map((p) => `<img src="${fileUrl(p)}" data-open="${esc(p)}">`).join('')}</div>` : ''}
+    ${Object.values(r.ocr || {}).some(Boolean) ? `<details class="small" style="margin:4px 0 8px"><summary>Words read from the picture</summary><div class="msg">${esc(Object.values(r.ocr).filter(Boolean).join('\n'))}</div></details>` : ''}
     ${r.hasMedia && !r.images?.length ? '<p class="small">This message had a picture. Open the chat in the WhatsApp window and use <b>From open WhatsApp chat</b> to bring it in.</p>' : ''}
     <div class="chips" style="margin-bottom:8px">
       <span class="chip">${a.source === 'claude' ? 'Read by Claude' : 'Read by patterns'}</span>

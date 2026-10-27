@@ -16,7 +16,10 @@ import android.widget.ProgressBar
 import android.widget.ScrollView
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import com.google.android.material.tabs.TabLayout
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
@@ -37,6 +40,12 @@ class MainActivity : AppCompatActivity() {
 
     private val scan = registerForActivityResult(ScanContract()) { r -> r.contents?.let { pairFrom(Uri.parse(it)) } }
     private val askNotify = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) { render() }
+
+    // Scan: a photo (of a monitor, a poster, a list) or a picture already on the phone.
+    private var photoUri: Uri? = null
+    private val takePhoto = registerForActivityResult(ActivityResultContracts.TakePicture()) { ok -> if (ok) photoUri?.let { scanUri(it) } }
+    private val pickImage = registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { u -> u?.let { scanUri(it) } }
+    private val askCamera = registerForActivityResult(ActivityResultContracts.RequestPermission()) { ok -> if (ok) openCamera() else toast("Camera not allowed: pick a picture instead.") }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -67,6 +76,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun handle(i: Intent?) {
+        // A picture shared to AV Courier (from WhatsApp, Gallery, a screenshot): read it.
+        if (i?.action == Intent.ACTION_SEND && i.type?.startsWith("image/") == true) {
+            @Suppress("DEPRECATION")
+            val shared = if (Build.VERSION.SDK_INT >= 33) i.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java) else i.getParcelableExtra(Intent.EXTRA_STREAM) as? Uri
+            shared?.let { scanUri(it) }
+            return
+        }
         val u = i?.data ?: return
         if (u.scheme == "avcourier" && u.host == "pair") pairFrom(u)
     }
@@ -316,16 +332,105 @@ class MainActivity : AppCompatActivity() {
                 app.pc.catalogError.isNotEmpty() -> app.pc.catalogError
                 else -> "The catalogue comes from the PC the next time this phone reaches it (it is imported on the PC: Find Data → Import catalogue)."
             }, muted = true))
+            content.addView(buttons(button(if (scanBusy) "Reading…" else "Scan a picture", outlined = true) { chooseScan() }))
             return
         }
         val when_ = if (c.version > 0) java.text.DateFormat.getDateInstance().format(java.util.Date(c.version)) else "?"
         content.addView(label("Catalogue of $when_ · ${"%,d".format(c.rows.size)} rows · searched on this phone", 13f, muted = true))
         if (app.pc.catalogError.isNotEmpty()) content.addView(label(app.pc.catalogError, 13f, muted = true))
         content.addView(findBox)
-        content.addView(buttons(button(if (findBusy) "Searching…" else "Search") { runFind() }))
+        content.addView(buttons(
+            button(if (findBusy) "Searching…" else "Search") { runFind() },
+            button(if (scanBusy) "Reading…" else "Scan a picture", outlined = true) { chooseScan() },
+        ))
         val res = findResults ?: return
         content.addView(label(if (res.isEmpty()) "Nothing found for “$findQuery”." else "${res.size} found for “$findQuery”", 13f, muted = true))
         for (m in res) content.addView(matchCard(c, m))
+    }
+
+    // ---------------------------------------------------------------- scan a picture
+    private var scanBusy = false
+
+    private fun chooseScan() {
+        if (scanBusy) return
+        AlertDialog.Builder(this).setTitle("Read a request from a picture")
+            .setItems(arrayOf("Take a photo (of a monitor, poster, list)", "Pick a picture or screenshot")) { _, i ->
+                if (i == 0) {
+                    if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) openCamera()
+                    else askCamera.launch(Manifest.permission.CAMERA)
+                } else pickImage.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+            }.show()
+    }
+
+    private fun openCamera() {
+        val dir = java.io.File(cacheDir, "scans").apply { mkdirs() }
+        dir.listFiles()?.forEach { it.delete() } // only the latest photo is kept
+        val f = java.io.File(dir, "scan-${System.currentTimeMillis()}.jpg")
+        photoUri = FileProvider.getUriForFile(this, "$packageName.files", f)
+        takePhoto.launch(photoUri!!)
+    }
+
+    private fun scanUri(u: Uri) {
+        scanBusy = true
+        render()
+        toast("Reading the picture…")
+        bg({ Ocr.read(this, u) }) { text, err ->
+            scanBusy = false
+            render()
+            when {
+                err != null -> toast("Could not read the picture: $err")
+                text.isNullOrBlank() -> toast("No words found in the picture. Take it straighter and closer, without glare.")
+                else -> showScanned(text)
+            }
+        }
+    }
+
+    /** What was read, to correct; then search the catalogue with it or keep it as a request. */
+    private fun showScanned(read: String) {
+        val box = EditText(this).apply {
+            setText(read)
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
+            minLines = 3
+            maxLines = 10
+        }
+        val who = EditText(this).apply {
+            hint = "Who asked (their WhatsApp chat name) — to add it as a request"
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_WORDS
+            setSingleLine()
+        }
+        val h = Heuristic.heuristic(read)
+        val note = label(if (h.isRequest) "Looks like a data request. Fix any misread words, then:" else "Words read from the picture. Fix any misread words, then:", 13f, muted = true)
+        val wrap = vbox(note, box, who).apply { setPadding(dp(20), dp(8), dp(20), 0) }
+        val dlg = AlertDialog.Builder(this).setTitle("Read from the picture").setView(wrap)
+            .setPositiveButton("Search catalogue", null)
+            .setNeutralButton("Add as request", null)
+            .setNegativeButton("Cancel", null).show()
+        dlg.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+            val t = box.text.toString().trim()
+            val c = app.pc.catalog
+            if (c == null) { toast("No catalogue on this phone yet: pair with the PC first."); return@setOnClickListener }
+            dlg.dismiss()
+            findQuery = "the picture"
+            findBusy = true
+            tabs.getTabAt(1)?.select()
+            render()
+            bg({ c.forRequest(t, limit = 50).ifEmpty { c.search(t.replace('\n', ' '), limit = 50) } }) { res, e ->
+                findBusy = false
+                findResults = res ?: emptyList()
+                if (e != null) toast(e)
+                render()
+            }
+        }
+        dlg.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
+            val t = box.text.toString().trim()
+            val name = who.text.toString().trim()
+            if (t.isEmpty()) return@setOnClickListener
+            if (name.isEmpty()) { who.error = "Who asked? Replies go to this WhatsApp chat."; return@setOnClickListener }
+            dlg.dismiss()
+            val r = app.inbox.addScanned(name, t)
+            app.pc.forwardPending()
+            open(localId = r.id)
+        }
     }
 
     private fun matchCard(c: Catalog, m: Catalog.Match): android.view.View {

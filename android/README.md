@@ -20,6 +20,13 @@ The phone companion to the AV Courier desktop app. It:
    **Tape ready — start** for held copies and **Tape ready — scan** for LTO tapes. Both always ask
    “is the drive light steady?” first.
 
+## Scan a picture
+
+Find tab → **Scan a picture**: take a photo (of a monitor, a poster, a list) or pick a screenshot,
+or share a picture to AV Courier from WhatsApp or Gallery. Google ML Kit reads its words on the
+phone, offline (English and Hindi; no Gujarati). Correct any misread words, then **Search
+catalogue** or **Add as request** (with the WhatsApp chat name of who asked, so replies reach them).
+
 ## Known limits
 
 - **Muted chats raise no notification**, so the app cannot see them. Unmute chats that send requests.

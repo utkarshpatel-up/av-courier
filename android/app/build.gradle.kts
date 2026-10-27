@@ -10,8 +10,8 @@ android {
         applicationId = "com.house.avcourier.companion"
         minSdk = 26
         targetSdk = 36
-        versionCode = 2
-        versionName = "0.1.1"
+        versionCode = 3
+        versionName = "0.1.2"
     }
 
     buildTypes {
@@ -37,6 +37,9 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.squareup.okhttp3:okhttp-sse:4.12.0")
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
+    // Reading words in pictures, on the phone (bundled models: work offline).
+    implementation("com.google.mlkit:text-recognition:16.0.1")
+    implementation("com.google.mlkit:text-recognition-devanagari:16.0.1")
 
     testImplementation("junit:junit:4.13.2")
     // The real org.json for tests (Android's own is only a stub on the JVM).

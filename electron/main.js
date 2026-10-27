@@ -14,6 +14,7 @@ const { Remote } = require('./remote');
 const { RequestSync, FolderBackend, GmailBackend, findGoogleDrive } = require('./sync');
 const { GoogleAuth, readClientFile } = require('./google-auth');
 const { senderKey, ignoredReason } = require('./senders');
+const { Ocr } = require('./ocr');
 const os = require('os');
 const QRCode = require('qrcode');
 
@@ -66,6 +67,7 @@ function activity(text) {
 }
 
 let catalog = new Catalog();
+const ocr = new Ocr(DATA);
 try { const c = readJSON('catalog.json', null); if (c) catalog = Catalog.fromJSON(c); } catch { /* re-import */ }
 
 let win, tray;
@@ -193,8 +195,17 @@ const imageData = (p) => `data:image/${path.extname(p).slice(1).replace('jpg', '
 
 async function analyseRequest(req) {
   const apiKey = settings.ai.enabled ? getSecret('anthropic') : '';
-  const images = req.images.filter(fs.existsSync).map(imageData);
-  req.analysis = await analyse({ text: req.text, images, apiKey });
+  const files = req.images.filter(fs.existsSync);
+  const images = files.map(imageData);
+  // The words in its pictures, read on this computer (once per picture), so a screenshot or
+  // a photo of a monitor is understood without Claude too.
+  req.ocr = req.ocr || {};
+  for (const f of files.slice(0, 5)) {
+    if (req.ocr[f] != null) continue;
+    try { req.ocr[f] = await ocr.read(f); } catch (e) { req.ocr[f] = ''; activity(`Could not read the picture from ${req.from.name}: ${e.message}`); }
+  }
+  const seen = files.map((f) => req.ocr[f]).filter(Boolean).join('\n');
+  req.analysis = await analyse({ text: [req.text, seen].filter(Boolean).join('\n'), images, apiKey });
   const a = req.analysis;
   req.matches = findRows({ text: a.searchText || req.text, ids: a.ids, numbers: a.numbers, dates: a.dates, keywords: a.keywords }, 15);
   if (a.aiError) activity(`Claude could not read the request from ${req.from.name}: ${a.aiError}`);
@@ -238,7 +249,9 @@ async function incoming(msg) {
   };
   await analyseRequest(req);
   if (!req.analysis.isRequest) {
-    if (msg.channel === 'manual' || req.images.length || req.analysis.score >= 15) req.status = msg.channel === 'manual' ? 'new' : 'maybe';
+    // forced: read from a picture on the phone, so someone chose to add it.
+    const chosen = msg.channel === 'manual' || msg.forced;
+    if (chosen || req.images.length || req.analysis.score >= 15) req.status = chosen ? 'new' : 'maybe';
     else return; // small talk: "ok", "thanks"
   }
   requests.unshift(req);
@@ -492,7 +505,7 @@ const api = {
     // WhatsApp Web on this PC may have seen the same message already.
     const dup = requests.find((r) => r.channel === msg.channel && (r.from.chat || r.from.name) === chat && text && r.text.includes(text) && Math.abs((msg.receivedAt || Date.now()) - r.lastAt) < 30 * 60000);
     if (dup) { dup.phoneSeen = true; return { id: dup.id, duplicate: true }; }
-    const req = await incoming({ channel: msg.channel === 'email' ? 'email' : 'whatsapp', externalId: `phone:${msg.externalId}`, from: { name: msg.from?.name || chat, chat, address: msg.from?.address, phone: true }, subject: msg.subject || '', text, receivedAt: msg.receivedAt || Date.now() });
+    const req = await incoming({ channel: msg.channel === 'email' ? 'email' : 'whatsapp', externalId: `phone:${msg.externalId}`, from: { name: msg.from?.name || chat, chat, address: msg.from?.address, phone: true }, subject: msg.subject || '', text, receivedAt: msg.receivedAt || Date.now(), forced: !!msg.scanned });
     const r = req || requests.find((x) => x.channel === msg.channel && (x.from.chat || x.from.name) === chat && x.text.includes(text));
     return { id: r?.id || null, status: r?.status || 'ignored' };
   },
@@ -623,5 +636,5 @@ app.whenReady().then(() => {
   if (process.env.AVC_SMOKE) require('./smoke')({ win, api, queue, out: process.env.AVC_SMOKE });
 });
 
-app.on('before-quit', () => { app.isQuitting = true; whatsapp.quitting = true; });
+app.on('before-quit', () => { app.isQuitting = true; whatsapp.quitting = true; ocr.close(); });
 app.on('window-all-closed', () => {});

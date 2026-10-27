@@ -288,6 +288,7 @@ class PcLink(private val app: App) {
                 val msg = JSONObject().put("channel", r.channel).put("externalId", p.externalId)
                     .put("from", JSONObject().put("name", r.chat).put("chat", r.chat))
                     .put("subject", r.subject).put("text", p.text).put("receivedAt", p.at)
+                    .put("scanned", p.externalId.startsWith(Inbox.SCAN))
                 val res = try {
                     call("phoneRequest", msg) as? JSONObject
                 } catch (e: PcError) {
