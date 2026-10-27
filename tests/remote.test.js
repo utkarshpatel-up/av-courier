@@ -213,3 +213,19 @@ test('verified businesses and ignored senders are never requests', () => {
   assert.equal(ignoredReason({ channel: 'email', from: { name: 'Urban Company', address: 'x@uc.in' } }, lists), '', 'the WhatsApp badge says nothing about email');
   assert.equal(senderKey('email', { name: 'Swapnil', address: 'Swapnil@Gmail.com' }), 'email:swapnil@gmail.com');
 });
+
+test('WhatsApp replies carry the message they answer', async () => {
+  const { withQuote, quoteLine } = require('../electron/notifier');
+  assert.equal(withQuote('Hi Ravi, here is where it is', '‪Bhai folder 3046 no data joie che‬\nand 3047'), '> Bhai folder 3046 no data joie che\n\nHi Ravi, here is where it is');
+  assert.equal(withQuote('Hi', ''), 'Hi', 'nothing to quote: unchanged');
+  assert.equal(quoteLine('\n\n  Raw data requirement  \n\nNeed raw folder 3046'), 'Raw data requirement');
+  assert.equal(quoteLine('x'.repeat(300)).length, 200);
+
+  const calls = [];
+  const wa = { status: 'ready', send: async (chat, text, opts) => { calls.push({ chat, text, opts }); return { quoted: 'reply' }; } };
+  const logs = [];
+  const n = new Notifier({ getTemplates: () => ({}), whatsapp: wa, log: (s) => logs.push(s) });
+  assert.equal(await n.send({ channel: 'whatsapp', name: 'Ravi', chat: 'Ravi', quote: 'Bhai folder 3046 no data joie che' }, 'Hi Ravi'), 'whatsapp-web');
+  assert.deepEqual(calls[0], { chat: 'Ravi', text: 'Hi Ravi', opts: { quote: 'Bhai folder 3046 no data joie che' } });
+  assert.match(logs.at(-1), /as a reply to their message/);
+});

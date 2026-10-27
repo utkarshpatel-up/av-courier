@@ -177,7 +177,9 @@ class RequestActivity : AppCompatActivity() {
     }
 
     private fun sendFromPhone(t: String) {
-        val out = Sender.send(this, channel, chat, t, pcReq?.str("subject") ?: local?.subject ?: "", from.str("address").ifBlank { null }, local?.pkg, foreground = true)
+        // WhatsApp: their words on top, so the reply is clearly about their message (email keeps the thread).
+        val body = if (channel == "whatsapp") Sender.withQuote(t, pcReq?.str("text")?.ifBlank { null } ?: local?.text) else t
+        val out = Sender.send(this, channel, chat, body, pcReq?.str("subject") ?: local?.subject ?: "", from.str("address").ifBlank { null }, local?.pkg, foreground = true)
         if (!out.ok) return toast(out.error ?: "Could not send")
         localId?.let { id -> app.inbox.update(id) { it.status = "replied"; it.history.add("Replied from the phone (${out.route})") } }
         // Tell the PC, when it can hear, so it does not remind you again.

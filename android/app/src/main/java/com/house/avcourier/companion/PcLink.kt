@@ -265,7 +265,9 @@ class PcLink(private val app: App) {
         val channel = to.str("channel").ifBlank { "whatsapp" }
         val chat = to.str("chat").ifBlank { to.str("name") }
         val out = try {
-            Sender.send(app, channel, chat, m.str("text"), m.str("subject"), to.str("address").ifBlank { null })
+            // WhatsApp: their words on top, so the reply is clearly about their message.
+            val text = if (channel == "whatsapp") Sender.withQuote(m.str("text"), to.str("quote")) else m.str("text")
+            Sender.send(app, channel, chat, text, m.str("subject"), to.str("address").ifBlank { null })
         } catch (e: Exception) {
             Sender.Outcome(false, "phone", e.message)
         }

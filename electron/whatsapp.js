@@ -4,11 +4,37 @@
 // Outgoing: the chat is opened through the search box and the message typed
 // with real keystrokes, so it is sent exactly as if you had typed it.
 // WhatsApp changes its page from time to time; the selectors live here only.
+const { withQuote, quoteLine } = require('./notifier');
 const { BrowserWindow, session } = require('electron');
 
 const URL = 'https://web.whatsapp.com/';
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36';
 const TAG = '__AVCOURIER__';
+// Starts a real WhatsApp reply to their message: hover it, open its menu, choose Reply.
+// Only on an incoming message that contains their words; false when that is not possible.
+const REPLY_TO = (want) => `(async () => {
+  const norm = (s) => String(s || '').replace(/[\\u200B-\\u200F\\u202A-\\u202E\\u2066-\\u2069\\uFEFF]/g, '').replace(/\\s+/g, ' ').trim().toLowerCase();
+  const w = norm(${JSON.stringify(want)}).slice(0, 60);
+  if (w.length < 4) return false;
+  const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+  const press = (el) => { for (const t of ['mousedown', 'mouseup', 'click']) el.dispatchEvent(new MouseEvent(t, { bubbles: true })); };
+  const hit = [...document.querySelectorAll('#main .message-in')].reverse().find((m) => norm(m.innerText).includes(w));
+  if (!hit) return false;
+  hit.scrollIntoView({ block: 'center' });
+  for (const t of ['mouseover', 'mouseenter', 'mousemove']) hit.dispatchEvent(new MouseEvent(t, { bubbles: true }));
+  await pause(350);
+  const arrow = hit.querySelector('[data-icon*="down-context"], [data-icon*="chevron-down"], [aria-label="Context menu" i], [aria-label*="message options" i]');
+  if (!arrow) return false;
+  press(arrow.closest('[role="button"], button') || arrow);
+  await pause(450);
+  const item = [...document.querySelectorAll('[role="application"] li, [role="menu"] [role="menuitem"], li[role="button"], div[role="button"]')]
+    .find((e) => /^reply$/i.test((e.innerText || '').trim()) || /^reply$/i.test(e.getAttribute('aria-label') || ''));
+  if (!item) { document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); return false; }
+  press(item);
+  await pause(400);
+  return true;
+})()`;
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // Runs in the WhatsApp page. Wraps Notification so each popup is also reported.
@@ -241,9 +267,11 @@ class WhatsApp {
     return { chat: r.chat, text: incoming.map((m) => `${m.meta}${m.text}`.trim()).join('\n'), images: incoming.flatMap((m) => m.images).slice(0, 5) };
   }
 
-  send(chat, text) {
+  // opts.quote: the message being answered. Sent as a WhatsApp reply to it when possible,
+  // otherwise with their words quoted on top ("> …"). Resolves { quoted: 'reply' | 'text' | '' }.
+  send(chat, text, opts = {}) {
     // One at a time: each send drives the same page.
-    const run = this.sending.then(() => this._send(chat, text));
+    const run = this.sending.then(() => this._send(chat, text, opts));
     this.sending = run.catch(() => {});
     return run;
   }
@@ -255,7 +283,7 @@ class WhatsApp {
     await sleep(80);
   }
 
-  async _send(chat, text) {
+  async _send(chat, text, opts = {}) {
     this.start();
     for (let i = 0; i < 40 && this.status !== 'ready'; i++) { await sleep(1000); await this._tick(); }
     if (this.status !== 'ready') throw new Error(this.status === 'qr' ? 'WhatsApp needs to be linked: scan the QR code' : 'WhatsApp Web did not load');
@@ -294,6 +322,16 @@ class WhatsApp {
     }
     if (!ready) throw new Error(`Could not open the chat with ${chat}`);
 
+    let quoted = '';
+    const want = quoteLine(opts.quote);
+    if (want) {
+      quoted = (await this._js(REPLY_TO(want)).catch(() => false)) ? 'reply' : 'text';
+      if (quoted === 'text') text = withQuote(text, want);
+      // Back to the message box (the reply bar, if any, stays above it).
+      await this._js(`(() => { const b = document.querySelector('#main footer div[contenteditable="true"]'); if (b) b.focus(); return !!b; })()`);
+      await sleep(150);
+    }
+
     const lines = String(text).split('\n');
     for (let i = 0; i < lines.length; i++) {
       if (lines[i]) await wc.insertText(lines[i]);
@@ -302,14 +340,15 @@ class WhatsApp {
     await sleep(200);
     await this._key('Enter');
     await sleep(1200);
-    const last = JSON.stringify(lines.find(Boolean)?.slice(0, 30) || '');
+    // Their quoted words show without the "> ": check our own first line.
+    const last = JSON.stringify(lines.find((l) => l && !l.startsWith('> '))?.slice(0, 30) || '');
     const sent = await this._js(`(() => {
       const outs = document.querySelectorAll('#main .message-out');
       const m = outs[outs.length - 1];
       return !!m && m.innerText.includes(${last});
     })()`);
     if (!sent) throw new Error('Message typed but not confirmed as sent: check the WhatsApp window');
-    return true;
+    return { quoted };
   }
 }
 

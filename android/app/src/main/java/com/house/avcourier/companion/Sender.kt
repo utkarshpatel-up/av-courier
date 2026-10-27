@@ -19,6 +19,22 @@ import androidx.core.app.RemoteInput
 object Sender {
     data class Outcome(val ok: Boolean, val route: String, val error: String? = null)
 
+    private val INVISIBLE = Regex("[\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF]")
+
+    /** The first line of the message being answered (electron/notifier.js quoteLine). */
+    fun quoteLine(s: String?): String =
+        (s ?: "").replace(INVISIBLE, "").split('\n').map { it.trim() }.firstOrNull { it.isNotEmpty() }?.take(200) ?: ""
+
+    /**
+     * Their words on top in WhatsApp's quote format ("> …", shown with a bar beside it), so
+     * the reply is clearly about their message. A notification reply cannot be a real
+     * WhatsApp reply-to-message, so the phone always sends it this way.
+     */
+    fun withQuote(text: String, quote: String?): String {
+        val q = quoteLine(quote)
+        return if (q.isEmpty()) text else "> $q\n\n$text"
+    }
+
     fun send(
         ctx: Context, channel: String, chat: String, text: String,
         subject: String = "", address: String? = null, pkg: String? = null,

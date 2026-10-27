@@ -8,6 +8,11 @@ const TEMPLATES = {
   notFound: 'Hi {name}, I could not find "{query}" in the archive. Can you send the date, place or drive/tape number?',
 };
 
+// The requester's own words, so a reply is clearly about their message: WhatsApp's quote
+// format ("> …", shown with a bar beside it) when a real quoted reply is not possible.
+const quoteLine = (s) => (String(s || '').replace(/[\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF]/g, '').split('\n').map((l) => l.trim()).find(Boolean) || '').slice(0, 200);
+const withQuote = (text, quote) => { const q = quoteLine(quote); return q ? `> ${q}\n\n${text}` : String(text); };
+
 const fill = (tpl, vars) => String(tpl).replace(/\{(\w+)\}/g, (m, k) => (vars[k] ?? m));
 const firstName = (n) => String(n || '').replace(/\s*\(.*\)$/, '').split(/\s+/)[0] || 'there';
 
@@ -49,7 +54,8 @@ class Notifier {
     return route;
   }
 
-  // recipient: { channel: 'whatsapp'|'email'|'phone', name, chat?, address?, reply? }
+  // recipient: { channel: 'whatsapp'|'email'|'phone', name, chat?, address?, reply?, quote? }
+  // quote: the message being answered (WhatsApp); email answers in its own thread instead.
   // Returns the route used: 'whatsapp-web', 'email', or a phone route.
   // WhatsApp goes through WhatsApp Web on this PC; when that is not linked or
   // fails, the paired phone sends it instead.
@@ -63,7 +69,8 @@ class Notifier {
       const linked = this.whatsapp?.status === 'ready' || this.whatsapp?.status === 'loading';
       if (!linked && phoneUp()) return this._viaPhone(recipient, text, subject, `WhatsApp Web on the PC is ${this.whatsapp?.status || 'off'}`);
       try {
-        await this.whatsapp.send(recipient.chat || recipient.name, text);
+        const r = await this.whatsapp.send(recipient.chat || recipient.name, text, { quote: recipient.quote });
+        if (r?.quoted === 'reply') { this.log?.(`Sent to ${recipient.name} on whatsapp as a reply to their message (WhatsApp Web on the PC)`); return 'whatsapp-web'; }
       } catch (e) {
         if (!phoneUp()) throw e;
         return this._viaPhone(recipient, text, subject, `WhatsApp Web failed: ${e.message}`);
@@ -97,4 +104,4 @@ class Notifier {
   }
 }
 
-module.exports = { Notifier, TEMPLATES, fill, firstName, rowLine, jobVars };
+module.exports = { Notifier, TEMPLATES, fill, firstName, rowLine, jobVars, withQuote, quoteLine };

@@ -272,7 +272,8 @@ setInterval(() => {
 
 function recipientFor(req) {
   if (req.channel === 'email') return { channel: 'email', name: req.from.name, address: req.from.address, reply: req.reply };
-  if (req.channel === 'whatsapp') return { channel: 'whatsapp', name: req.from.name, chat: req.from.chat };
+  // quote: their message, so the reply shows which request it answers.
+  if (req.channel === 'whatsapp') return { channel: 'whatsapp', name: req.from.name, chat: req.from.chat, quote: req.text };
   return null;
 }
 
