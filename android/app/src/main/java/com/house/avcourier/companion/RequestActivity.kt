@@ -88,6 +88,7 @@ class RequestActivity : AppCompatActivity() {
         } else if (pcId != null || app.pc.catalog != null) {
             content.addView(label("No catalogue match. Try the Find tab, or reply “not found”.", muted = true))
         }
+        checklist()
 
         content.addView(label("Reply", 17f, bold = true))
         content.addView(buttons(
@@ -244,6 +245,152 @@ class RequestActivity : AppCompatActivity() {
             .setItems(choices) { _, i ->
                 if (i < dests.size) pick(dests[i]) else ask("Folder on the PC", dests.firstOrNull() ?: "", "Copy", multiLine = false, hint = "E:\\Requests\\Name") { pick(it) }
             }.show()
+    }
+
+    // ---------------------------------------------------------------- checklist
+    // The request item by item, with the drive each is on (electron/main.js draftChecklist): a draft
+    // until approved, then one copy per item, ticked off as each finishes, and one message at the end.
+    // Kept on the PC: every change here is a call to it.
+
+    private val icons = mapOf("copying" to "⏳", "waiting" to "⚠", "failed" to "✗", "todo" to "☐", "done" to "✓", "unavailable" to "—")
+
+    private fun checklist() {
+        content.addView(label("Checklist", 17f, bold = true))
+        if (pcId == null) {
+            content.addView(label("Made on the PC: it shows here once the request has reached the PC.", 13f, muted = true))
+            return
+        }
+        val c = pcReq?.optJSONObject("checklist")
+        if (c == null) {
+            if (live) content.addView(buttons(button("Make it from the message", outlined = true) { act("draftChecklist", pcId) }))
+            else content.addView(label("None yet. Connect to the PC to make one.", 13f, muted = true))
+            return
+        }
+        val draft = c.str("state") == "draft"
+        val items = c.optJSONArray("items").objects()
+        val done = items.count { it.str("status") == "done" }
+        val sent = c.optLong("sentAt")
+        content.addView(label(when {
+            draft -> "Draft: check it, then approve. Nothing is copied until then."
+            sent > 0 -> "$done of ${items.size} done · told ${ago(sent)}"
+            else -> "$done of ${items.size} done${if (c.optBoolean("autoSend")) " · the message goes when all are done" else ""}"
+        }, 13f, muted = true))
+        if (items.isEmpty()) content.addView(label("Empty: add items below.", 13f, muted = true))
+        for (i in items) content.addView(itemCard(i, draft))
+        if (!live) {
+            content.addView(label("PC not reachable: connect to it to change the list.", 13f, muted = true))
+            return
+        }
+        content.addView(buttons(
+            button("+ To-do", outlined = true) { ask("A to-do (for you, not in the message)", "", "Add", multiLine = false) { t -> if (t.isNotBlank()) act("addChecklistItem", pcId, JSONObject().put("title", t.trim())) } },
+            button("+ Ticked matches", outlined = true) { addTicked() },
+            button("+ Folder on the PC", outlined = true) { addFolder() },
+        ))
+        if (draft) {
+            val dest = c.str("dest")
+            content.addView(label("Copy everything to: ${dest.ifBlank { "(choose a folder)" }}", 13f))
+            val auto = CheckBox(this).apply {
+                text = "When every item is done, tell $name automatically"
+                isChecked = c.optBoolean("autoSend")
+                setOnCheckedChangeListener { _, on -> act("setChecklist", pcId, JSONObject().put("autoSend", on)) }
+            }
+            content.addView(auto)
+            val copies = items.count { it.str("kind") == "copy" }
+            content.addView(buttons(
+                button("Approve · start $copies cop${if (copies == 1) "y" else "ies"}") {
+                    if (dest.isBlank()) toast("Choose the folder to copy to first.")
+                    else act("approveChecklist", pcId, ok = "Approved: copies are in the queue on the PC ✓")
+                },
+                button("Change folder", outlined = true) { pickDest { d -> act("setChecklist", pcId, JSONObject().put("dest", d)) } },
+                button("Make again", outlined = true) { confirm("Make the list again?", "It is made again from the message; changes to it are lost.", "Make again") { act("draftChecklist", pcId) } },
+            ))
+        } else {
+            content.addView(buttons(button(if (done == items.size) "Send the message…" else "Complete and send…") { complete() }))
+        }
+    }
+
+    private fun itemCard(i: JSONObject, draft: Boolean): android.view.View {
+        val id = i.str("id")
+        val status = i.str("status")
+        val todo = i.str("kind") == "todo"
+        val asked = i.str("ask")
+        val sources = i.optJSONArray("sources")?.length() ?: 0
+        val where = when {
+            todo -> if (draft) "To-do" else ""
+            sources > 0 -> "From ${i.str("where").ifBlank { "a folder on the PC" }}"
+            draft || status == "waiting" -> "Nothing to copy from yet"
+            else -> ""
+        }
+        val views = mutableListOf<android.view.View>(
+            label("${if (draft) (if (todo) "☐" else "⧉") else icons[status] ?: ""}  ${i.str("title")}", 15f, bold = true),
+        )
+        if (asked.isNotBlank() && asked != i.str("title")) views.add(label("Asked: $asked", 13f, muted = true))
+        listOf(where, i.str("backups"), i.str("note")).filter { it.isNotBlank() }.takeIf { it.isNotEmpty() }?.let { views.add(label(it.joinToString(" · "), 13f)) }
+        if (live) {
+            val acts = mutableListOf<android.view.View>()
+            val cands = i.optJSONArray("candidates")
+            if (draft) {
+                if ((cands?.length() ?: 0) > 1) acts.add(button("Other match", outlined = true) {
+                    val titles = (0 until cands!!.length()).map { cands.optString(it) }
+                    AlertDialog.Builder(this).setTitle("Which recording?").setItems(titles.toTypedArray()) { _, k -> act("pickCandidate", pcId, id, k) }.show()
+                })
+                acts.add(button("Remove", outlined = true) { act("checklistItem", pcId, id, "remove") })
+            } else when (status) {
+                "copying" -> views.add(label("In the queue on the PC", 12f, muted = true))
+                "done", "unavailable" -> acts.add(button("Undo", outlined = true) { act("checklistItem", pcId, id, "reopen") })
+                else -> {
+                    acts.add(if (todo) button("Done") { act("checklistItem", pcId, id, "done") } else button("Copy again") { act("checklistItem", pcId, id, "copy") })
+                    acts.add(button("Can’t do…", outlined = true) {
+                        ask("Why can’t it be done?", "", "Save", hint = "Goes in the message, e.g. “drive 112 is damaged”") { why -> act("checklistItem", pcId, id, "unavailable", why.trim()) }
+                    })
+                }
+            }
+            if (acts.isNotEmpty()) views.add(buttons(*acts.toTypedArray()))
+        }
+        return card(*views.toTypedArray())
+    }
+
+    /** A call to the PC's checklist, then the list as the PC now has it. */
+    private fun act(method: String, vararg args: Any?, ok: String? = null) {
+        bg({ app.pc.call(method, *args); app.pc.refresh() }) { _, err ->
+            if (err != null) toast(err) else ok?.let { toast(it) }
+            render()
+        }
+    }
+
+    private fun addTicked() {
+        val rows = checked.sorted().mapNotNull { matches.getOrNull(it) }.filter { !it.optBoolean("local") }
+        if (rows.isEmpty()) return toast("Tick matches above first.")
+        bg({ for (r in rows) app.pc.call("addChecklistItem", pcId, JSONObject().put("row", r)); app.pc.refresh() }) { _, err ->
+            toast(err ?: "Added ${rows.size} to the checklist ✓")
+            checked.clear()
+            render()
+        }
+    }
+
+    private fun addFolder() {
+        ask("Folder on the PC to copy", "", "Add", multiLine = false, hint = "E:\\3034 Dt-15 Sep 2026") { path ->
+            val p = path.trim()
+            if (p.isNotEmpty()) act("addChecklistItem", pcId, JSONObject().put("sources", JSONArray().put(p)))
+        }
+    }
+
+    private fun pickDest(then: (String) -> Unit) {
+        val dests = app.pc.recentDest()
+        val choices = (dests + "Other folder…").toTypedArray()
+        AlertDialog.Builder(this).setTitle("Copy everything to")
+            .setItems(choices) { _, i ->
+                if (i < dests.size) then(dests[i]) else ask("Folder on the PC", dests.firstOrNull() ?: "", "OK", multiLine = false, hint = "E:\\Requests\\Name") { d -> if (d.isNotBlank()) then(d.trim()) }
+            }.show()
+    }
+
+    private fun complete() {
+        bg({ app.pc.call("checklistMessage", pcId) as? String }) { msg, err ->
+            if (msg == null) return@bg toast(err ?: "Could not make the message")
+            ask("Message to $name", msg, "Send") { t ->
+                if (t.isNotBlank()) act("completeRequest", pcId, t.trim(), ok = "Sent ✓")
+            }
+        }
     }
 
     private fun close() {

@@ -648,6 +648,25 @@ const api = {
     else c.edited = true;
     saveRequests();
   },
+  // Small changes to a draft, for the phone (it has the list without its catalogue rows).
+  setChecklist: (id, patch = {}) => {
+    const c = reqById(id).checklist;
+    if (c?.state !== 'draft') throw new Error('Only a draft can be changed this way');
+    if ('dest' in patch) c.dest = String(patch.dest || '').trim();
+    if ('autoSend' in patch) c.autoSend = !!patch.autoSend;
+    c.edited = true;
+    saveRequests();
+  },
+  // Another of an item's catalogue rows (k: its place among the candidates).
+  pickCandidate: (id, iid, k) => {
+    const c = reqById(id).checklist;
+    const item = c?.state === 'draft' && c.items.find((i) => i.id === iid);
+    const row = item?.candidates?.[k];
+    if (!row) throw new Error('No such match');
+    Object.assign(item, { ...itemFromRow(row, item.ask), id: item.id, candidates: item.candidates });
+    c.edited = true;
+    saveRequests();
+  },
   checklistMessage: (id) => checklistMessage(reqById(id)),
   // Send now, with what is done and why the rest is not.
   completeRequest: async (id, text) => { const r = reqById(id); await sendChecklist(r, String(text || '').trim() || checklistMessage(r)); saveRequests(); return true; },

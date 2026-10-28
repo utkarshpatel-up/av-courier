@@ -112,6 +112,23 @@ async function smoke({ win, api, queue, out }) {
   const pr = await api.phoneRequest({ channel: 'whatsapp', externalId: 'scan:1', from: { name: 'Asha Shah', chat: 'Asha Shah' }, text: '', receivedAt: Date.now(), scanned: true, files: [{ name: 'Needed footage.xls', data: xls }] });
   const preq = api.state().requests.find((r) => r.id === pr.id);
   errors.push('PHONE XLS: ' + JSON.stringify({ pr, rows: preq && Object.values(preq.sheets).map((s) => s.rows), items: preq?.checklist.items.length }));
+
+  // The phone's way through a checklist: only the calls it may make, on the list it is sent.
+  const { Remote, PHONE_CALLS } = require('./remote');
+  const phone = (m, ...a) => { if (!PHONE_CALLS.has(m)) throw new Error(`phone may not call ${m}`); return api[m](...a); };
+  const seen = () => new Remote({ api }).state().requests.find((r) => r.id === pr.id).checklist;
+  let pc = seen();
+  errors.push('PHONE SEES: ' + JSON.stringify({ state: pc.state, items: pc.items.map((i) => [i.title, i.candidates, 'row' in i]) }));
+  await phone('setChecklist', pr.id, { dest: path.join(out, 'dest-phone'), autoSend: false });
+  await phone('addChecklistItem', pr.id, { title: 'Check the audio on item 2' });
+  await phone('checklistItem', pr.id, seen().items[1].id, 'remove');
+  await phone('approveChecklist', pr.id);
+  while (queue.running || queue.jobs.some((j) => j.status === 'queued')) await new Promise((r) => setTimeout(r, 200));
+  await new Promise((r) => setTimeout(r, 300));
+  await phone('checklistItem', pr.id, seen().items.find((i) => i.kind === 'todo').id, 'done');
+  pc = seen();
+  errors.push('PHONE AFTER: ' + JSON.stringify({ state: pc.state, dest: path.basename(pc.dest), items: pc.items.map((i) => [i.title, i.status]), status: api.state().requests.find((r) => r.id === pr.id).status }));
+  errors.push('PHONE MESSAGE: ' + await phone('checklistMessage', pr.id));
   await win.webContents.executeJavaScript('refresh()');
   await shot('sheet-request', `selReq=${JSON.stringify(sr.id)}; reqFilter='all'; go('requests'); document.querySelector('main').scrollTop = 0`);
 

@@ -15,7 +15,7 @@ const PHONE_CALLS = new Set([
   'search', 'reanalyse', 'setRequest', 'recipientFor', 'locatedMessage', 'notFoundMessage', 'replyToRequest',
   'addJob', 'pause', 'resume', 'skip', 'holdJob', 'cancelJob', 'retryJob', 'moveJob', 'notifyJob',
   'previewJobMessage', 'scanTape', 'rescanDrives', 'addManualRequest', 'phoneRequest', 'dismissRequests', 'ignoreSenders',
-  'draftChecklist', 'itemFromRow', 'saveChecklist', 'approveChecklist', 'addChecklistItem', 'checklistItem', 'checklistMessage', 'completeRequest',
+  'draftChecklist', 'itemFromRow', 'saveChecklist', 'setChecklist', 'pickCandidate', 'approveChecklist', 'addChecklistItem', 'checklistItem', 'checklistMessage', 'completeRequest',
 ]);
 
 const CODE_TTL = 10 * 60000;
@@ -58,7 +58,8 @@ const slimRequest = (r) => ({
   id: r.id, channel: r.channel, from: r.from, subject: r.subject, text: r.text, status: r.status,
   receivedAt: r.receivedAt, lastAt: r.lastAt, summary: r.analysis?.summary || '', score: r.analysis?.score,
   matches: (r.matches || []).slice(0, 15).map((m) => ({ ...m, line: lineFor(m) })), jobIds: r.jobIds, history: (r.history || []).slice(-8),
-  checklist: r.checklist && { ...r.checklist, items: r.checklist.items.map(({ row, candidates, ...i }) => i) },
+  // Without catalogue rows; the other matches by title only (pickCandidate takes their place).
+  checklist: r.checklist && { ...r.checklist, items: r.checklist.items.map(({ row, candidates, ...i }) => ({ ...i, candidates: (candidates || []).map((m) => m.title) })) },
 });
 const slimJob = (j) => {
   const { files, log, ...rest } = j; // a job can list thousands of files
