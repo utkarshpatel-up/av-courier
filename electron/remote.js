@@ -23,20 +23,30 @@ const MAX_BODY = 512 * 1024;
 
 const sha = (s) => crypto.createHash('sha256').update(String(s)).digest();
 
-// Private, loopback and link-local addresses only: the remote never answers the internet.
+// Tailscale (and other carrier-grade NAT) addresses, 100.64.0.0/10: a private network
+// that only the user's own devices join, so the phone can reach the PC off the office Wi-Fi.
+function isTailscale(addr) {
+  const m = /^100\.(\d+)\./.exec(String(addr || '').replace(/^::ffff:/i, ''));
+  return !!m && +m[1] >= 64 && +m[1] <= 127;
+}
+
+// Private, loopback, link-local and Tailscale addresses only: the remote never answers the internet.
 function isLan(addr) {
   const a = String(addr || '').replace(/^::ffff:/i, '');
   if (a === '::1' || a === '127.0.0.1' || /^127\./.test(a)) return true;
   if (/^(10\.|192\.168\.|169\.254\.)/.test(a)) return true;
   const m = /^172\.(\d+)\./.exec(a);
   if (m && +m[1] >= 16 && +m[1] <= 31) return true;
+  if (isTailscale(a)) return true;
   return /^(fc|fd|fe8|fe9|fea|feb)/i.test(a);
 }
 
+// Office addresses first, Tailscale last: the phone tries them in this order.
 function lanAddresses() {
-  return Object.values(os.networkInterfaces()).flat()
+  const all = Object.values(os.networkInterfaces()).flat()
     .filter((i) => i && i.family === 'IPv4' && !i.internal && isLan(i.address))
     .map((i) => i.address);
+  return [...all.filter((a) => !isTailscale(a)), ...all.filter(isTailscale)];
 }
 
 const lineFor = (m) => { try { return rowLine(m); } catch { return m.title || m.id || ''; } };
@@ -296,4 +306,4 @@ class Remote extends EventEmitter {
   }
 }
 
-module.exports = { Remote, isLan, lanAddresses, PHONE_CALLS };
+module.exports = { Remote, isLan, isTailscale, lanAddresses, PHONE_CALLS };

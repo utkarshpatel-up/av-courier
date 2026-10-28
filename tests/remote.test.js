@@ -96,8 +96,8 @@ test('unauthenticated, wrong, revoked tokens and disallowed calls are refused', 
 });
 
 test('only local network addresses are served', () => {
-  for (const a of ['127.0.0.1', '::1', '::ffff:192.168.1.20', '10.0.0.5', '172.16.4.1', '172.31.255.1', '169.254.3.3', 'fe80::1', 'fd12::3']) assert.ok(isLan(a), a);
-  for (const a of ['8.8.8.8', '172.32.0.1', '::ffff:49.36.1.1', '2401:4900::1', '']) assert.ok(!isLan(a), a);
+  for (const a of ['127.0.0.1', '::1', '::ffff:192.168.1.20', '10.0.0.5', '172.16.4.1', '172.31.255.1', '169.254.3.3', 'fe80::1', 'fd12::3', '100.64.0.1', '100.101.102.103', '::ffff:100.127.255.254']) assert.ok(isLan(a), a);
+  for (const a of ['8.8.8.8', '172.32.0.1', '::ffff:49.36.1.1', '2401:4900::1', '100.63.255.255', '100.128.0.1', '']) assert.ok(!isLan(a), a);
 });
 
 // A phone listening on the event stream that "sends" each message it is given.
