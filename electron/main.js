@@ -5,7 +5,7 @@ const crypto = require('crypto');
 const { execFile } = require('child_process');
 const { CopyQueue, fmtBytes } = require('./copyqueue');
 const { Catalog } = require('./catalog');
-const { analyse, searchRequest } = require('./extract');
+const { analyse, searchRequest, requestAsks } = require('./extract');
 const { sendEmail, GmailWatcher } = require('./mail');
 const { WhatsApp } = require('./whatsapp');
 const { Notifier, TEMPLATES, fill, firstName, rowLine } = require('./notifier');
@@ -15,6 +15,7 @@ const { RequestSync, FolderBackend, GmailBackend, findGoogleDrive } = require('.
 const { GoogleAuth, readClientFile } = require('./google-auth');
 const { senderKey, ignoredReason } = require('./senders');
 const { Ocr } = require('./ocr');
+const { readSheet, isSheet } = require('./sheet');
 const os = require('os');
 const QRCode = require('qrcode');
 
@@ -91,9 +92,22 @@ queue.on('job-finished', async (job) => {
   const ok = job.status === 'done';
   activity(`${ok ? 'Finished' : job.status === 'cancelled' ? 'Cancelled' : 'Failed'}: ${job.name} (${job.done}/${job.count} files, ${fmtBytes(job.bytesTotal)})`);
   writeReport(job);
-  if (job.status === 'cancelled') return;
+  if (job.status === 'cancelled') {
+    const r = requests.find((x) => x.id === job.requestId);
+    const it = r?.checklist?.items.find((i) => i.id === job.itemId);
+    if (it) { Object.assign(it, { status: 'waiting', note: 'Copy cancelled' }); await checklistProgress(r); saveRequests(); }
+    return;
+  }
   toast(ok ? 'Copy finished' : 'Copy finished with errors', `${job.name}: ${job.done} of ${job.count} files${job.failed ? `, ${job.failed} failed` : ''}`);
   const req = requests.find((r) => r.id === job.requestId);
+  // One item of a request's checklist: tick it, and tell the requester once every item is through.
+  const item = req?.checklist?.items.find((i) => i.id === job.itemId);
+  if (item) {
+    Object.assign(item, ok ? { status: 'done', note: '' } : { status: 'failed', note: `${job.failed || job.count - job.done} of ${job.count} files failed` });
+    req.history.push({ at: Date.now(), text: `${ok ? '✓' : '✗'} ${item.title}` });
+    await checklistProgress(req);
+    return saveRequests();
+  }
   if (req) { req.status = ok ? 'ready' : 'attention'; req.history.push({ at: Date.now(), text: `Copy ${ok ? 'finished' : 'had errors'}: ${job.name}` }); }
   const live = queue.get(job.id);
   if (job.notify?.length && (job.autoSend ?? settings.notify.autoSend) && ok) {
@@ -165,7 +179,8 @@ const findRows = (q, limit) => withDisk(catalog.search(q, limit));
 // A request's matches (a list of recordings item by item: extract.js searchRequest).
 const matchRequest = (text, a) => withDisk(searchRequest(catalog, text, a));
 // The request's words plus the words read from its pictures.
-const requestText = (r) => [r.text, ...Object.values(r.ocr || {})].filter(Boolean).join('\n');
+// The request's words, the words read from its pictures, and the rows of its spreadsheets.
+const requestText = (r) => [r.text, ...Object.values(r.ocr || {}), ...Object.values(r.sheets || {}).map((s) => s.text)].filter(Boolean).join('\n\n');
 function refreshFound() {
   for (const r of requests) if (r.matches?.length && !['closed', 'dismissed'].includes(r.status)) r.matches = withDisk(r.matches);
   saveRequests();
@@ -196,6 +211,19 @@ function saveImages(images) {
   }).filter(Boolean);
 }
 
+// Spreadsheets sent with a request: kept beside the pictures, under their own names.
+// files: [{ name, data (base64) }] from a mail, or paths picked or dropped on this computer.
+function saveFiles(files) {
+  return (files || []).map((f) => {
+    const name = path.basename(typeof f === 'string' ? f : f.name || 'request.xlsx').replace(/[\\/:*?"<>|]/g, '_');
+    if (!isSheet(name)) return null;
+    const p = path.join(ATTACH, `${crypto.randomBytes(4).toString('hex')} ${name}`);
+    if (typeof f === 'string') fs.copyFileSync(f, p); else fs.writeFileSync(p, Buffer.from(f.data, 'base64'));
+    return p;
+  }).filter(Boolean);
+}
+const fileName = (p) => path.basename(p).replace(/^[0-9a-f]{8} /, '');
+
 const imageData = (p) => `data:image/${path.extname(p).slice(1).replace('jpg', 'jpeg')};base64,${fs.readFileSync(p).toString('base64')}`;
 
 async function analyseRequest(req) {
@@ -209,10 +237,17 @@ async function analyseRequest(req) {
     if (req.ocr[f] != null) continue;
     try { req.ocr[f] = await ocr.read(f); } catch (e) { req.ocr[f] = ''; activity(`Could not read the picture from ${req.from.name}: ${e.message}`); }
   }
+  // The rows of its spreadsheets, read once per file.
+  req.sheets = req.sheets || {};
+  for (const f of (req.files || []).filter(fs.existsSync)) {
+    if (req.sheets[f] != null) continue;
+    try { req.sheets[f] = readSheet(f); } catch (e) { req.sheets[f] = { text: '', rows: 0, sheets: [], error: e.message }; activity(`Could not read the spreadsheet ${fileName(f)} from ${req.from.name}: ${e.message}`); }
+  }
   const text = requestText(req);
   req.analysis = await analyse({ text, images, apiKey });
   const a = req.analysis;
   req.matches = matchRequest(text, a);
+  redraft(req);
   if (a.aiError) activity(`Claude could not read the request from ${req.from.name}: ${a.aiError}`);
 }
 
@@ -227,10 +262,12 @@ async function incoming(msg) {
   const now = Date.now();
   // Already have it (same chat, same words): a re-read of the chat list must not add it again.
   const same = (s) => String(s || '').replace(/[​-‏‪-‮⁦-⁩﻿]/g, '').replace(/\s+/g, ' ').trim().slice(0, 120);
-  if (msg.channel === 'whatsapp' && requests.some((r) => r.channel === 'whatsapp' && r.from.chat === msg.from.chat && same(r.text).includes(same(msg.text)) && now - r.receivedAt < 7 * 86400000)) return;
+  // A spreadsheet sent on its own (from the phone) is always a request of its own.
+  const sheetOnly = !!msg.files?.length && !String(msg.text || '').trim();
+  if (msg.channel === 'whatsapp' && !sheetOnly && requests.some((r) => r.channel === 'whatsapp' && r.from.chat === msg.from.chat && same(r.text).includes(same(msg.text)) && now - r.receivedAt < 7 * 86400000)) return;
 
   // People send a request over several WhatsApp messages: join them.
-  if (msg.channel === 'whatsapp') {
+  if (msg.channel === 'whatsapp' && !sheetOnly) {
     const open = requests.find((r) => r.channel === 'whatsapp' && r.from.chat === msg.from.chat && ['new', 'maybe'].includes(r.status) && now - r.lastAt < settings.whatsapp.groupWindowMin * 60000);
     // The same message can come twice (notification, then chat list): keep it once.
     const dup = open && open.text.replace(/\s+/g, ' ').includes(msg.text.replace(/\s+/g, ' ').slice(0, 80));
@@ -248,7 +285,7 @@ async function incoming(msg) {
   const req = {
     id: crypto.randomBytes(6).toString('hex'),
     channel: msg.channel, externalId: msg.externalId, from: msg.from, subject: msg.subject || '',
-    text: msg.text, images: saveImages(msg.images || []), hasMedia: !!msg.hasMedia,
+    text: msg.text, images: saveImages(msg.images || []), files: saveFiles(msg.files), hasMedia: !!msg.hasMedia,
     receivedAt: msg.receivedAt || now, lastAt: now, reply: msg.reply || null,
     status: 'new', jobIds: [], history: [{ at: now, text: `Received on ${msg.channel}` }],
   };
@@ -256,7 +293,7 @@ async function incoming(msg) {
   if (!req.analysis.isRequest) {
     // forced: read from a picture on the phone, so someone chose to add it.
     const chosen = msg.channel === 'manual' || msg.forced;
-    if (chosen || req.images.length || req.analysis.score >= 15) req.status = chosen ? 'new' : 'maybe';
+    if (chosen || req.images.length || req.files.length || req.analysis.score >= 15) req.status = chosen ? 'new' : 'maybe';
     else return; // small talk: "ok", "thanks"
   }
   requests.unshift(req);
@@ -274,8 +311,11 @@ function announce(req) {
 }
 
 // Search the catalogue again with what was read from the request.
-const rematch = (r) => { if (r.analysis) r.matches = matchRequest(requestText(r), r.analysis); };
+const rematch = (r) => { if (r.analysis) { r.matches = matchRequest(requestText(r), r.analysis); redraft(r); } };
+// The draft follows the request's words until you change it; an approved list is yours.
+function redraft(r) { if (!r.checklist || (r.checklist.state === 'draft' && !r.checklist.edited)) r.checklist = draftChecklist(r); }
 
+const reqById = (id) => { const r = requests.find((x) => x.id === id); if (!r) throw new Error('Request not found'); return r; };
 const openRequests = () => requests.filter((r) => ['new', 'attention'].includes(r.status));
 
 // Anything left unanswered keeps coming back until it is dealt with.
@@ -293,6 +333,92 @@ function recipientFor(req) {
   // quote: their message, so the reply shows which request it answers.
   if (req.channel === 'whatsapp') return { channel: 'whatsapp', name: req.from.name, chat: req.from.chat, quote: req.text };
   return null;
+}
+
+// ---------------------------------------------------------------- checklist
+// A request becomes a checklist: drafted from its words (each item asked for, with its best
+// catalogue row and the drive it is on), changed and approved by you, then one copy per item.
+// Items tick off as their copies finish; the requester hears once, when every item is done,
+// or when you complete it and say what could not be done.
+const itemId = () => crypto.randomBytes(4).toString('hex');
+const slimRow = ({ found, ...row }) => row;
+// "Live Garba (Navratri,Garba), Adalaj, 17 Oct 2026"; a row with no topic starts at its event.
+const itemTitle = (row) => rowLine(row).split('\n')[0].replace(/^•\s*/, '').replace(/^\((.+?)\)/, '$1');
+const rootName = (p) => String(p || '').replace(/[\\/]+$/, '').split(/[\\/]/).pop() || String(p || '');
+const isDone = (i) => i.status === 'done';
+
+// Where an item's data is now: a folder on a connected drive, or why it cannot be copied yet.
+function sourceFor(row) {
+  const backups = (row.locations || []).map((l) => `${l.label.replace(/\s*backup$/i, '')}: ${l.value}`).join(' · ');
+  const f = drives.find(row)[0];
+  if (f?.offline) return { sources: [], where: `Tape ${f.tape}`, note: `Load tape ${f.tape}, then Copy again`, backups };
+  if (f) return { sources: [f.session || f.path], where: f.tape ? `Tape ${f.tape}` : rootName(f.root), note: f.exact ? '' : 'Date on disk differs: check it', backups };
+  if (row.path && fs.existsSync(row.path)) return { sources: [row.path], where: path.parse(row.path).root || row.path, note: '', backups };
+  return { sources: [], where: '', note: 'Not on a connected drive', backups };
+}
+
+function itemFromRow(row, ask = '') {
+  return { id: itemId(), ask, title: itemTitle(row), row: slimRow(row), kind: 'copy', ...sourceFor(row), status: 'draft' };
+}
+
+function draftChecklist(req) {
+  const asks = req.analysis ? requestAsks(catalog, requestText(req), req.analysis) : [];
+  const items = asks.map(({ ask, matches }) => (matches.length
+    ? { ...itemFromRow(matches[0], ask), candidates: matches.map((m) => ({ ...slimRow(m), title: itemTitle(m) })) }
+    : { id: itemId(), ask, title: ask, kind: 'copy', sources: [], where: '', backups: '', note: 'Nothing in the catalogue matches: add a folder, or make it a to-do', status: 'draft', candidates: [] }));
+  return { state: 'draft', items, dest: settings.recentDest[0] || '', notify: [recipientFor(req)].filter(Boolean), autoSend: settings.notify.autoSend, edited: false };
+}
+
+// One copy for one item, from wherever its data is now (a drive may have been plugged in since).
+async function queueItem(req, item) {
+  if (item.kind === 'todo') { item.status = 'todo'; return; }
+  if (item.row && !item.manual) Object.assign(item, sourceFor(item.row));
+  if (!item.sources?.length) { item.status = 'waiting'; item.note = item.note || 'Nothing to copy yet'; return; }
+  const id = await api.addJob({ sources: item.sources, dest: req.checklist.dest, name: item.title.slice(0, 80), notify: [], requestId: req.id, itemId: item.id, autoSend: false });
+  const job = queue.get(id);
+  Object.assign(item, { jobId: id, status: 'copying', note: job?.holdReason || item.note || '' });
+}
+
+function checklistMessage(req) {
+  const c = req.checklist;
+  // Your own to-dos are for you: the requester hears only about their data.
+  const theirs = c.items.filter((i) => i.kind !== 'todo');
+  const done = theirs.filter(isDone), rest = theirs.filter((i) => !isDone(i));
+  const key = rest.length ? 'requestPartial' : 'requestDone';
+  return fill(settings.notify.templates[key] || TEMPLATES[key], {
+    name: firstName(req.from.name), dest: c.dest, count: theirs.length,
+    done: done.map((i) => `• ${i.title}`).join('\n') || '• nothing yet',
+    issues: rest.map((i) => `• ${i.title}${i.note ? ` — ${i.note}` : ''}`).join('\n'),
+  });
+}
+
+async function sendChecklist(req, text) {
+  const c = req.checklist;
+  const to = c.notify?.length ? c.notify : [recipientFor(req)].filter(Boolean);
+  if (!to.length) throw new Error('This request was added by hand: no one to tell. Use Write reply… instead.');
+  const sent = [];
+  for (const r of to) {
+    try { await notifier.send(r, text, req.subject || 'Your data request'); sent.push(r.name); }
+    catch (e) { activity(`Could not tell ${r.name}: ${e.message}`); }
+  }
+  if (!sent.length) throw new Error('The message could not be sent: see Activity');
+  const n = c.items.filter(isDone).length;
+  c.sentAt = Date.now();
+  req.status = n === c.items.length ? 'delivered' : 'replied';
+  req.history.push({ at: Date.now(), text: `Told ${sent.join(', ')}: ${n} of ${c.items.length} ready` });
+}
+
+// After any item changes: still copying, all done (send, if allowed), or waiting for you.
+async function checklistProgress(req) {
+  const c = req.checklist;
+  if (c?.state !== 'approved' || c.sentAt) return;
+  if (c.items.some((i) => i.status === 'copying')) { req.status = 'copying'; return; }
+  const n = c.items.filter(isDone).length;
+  if (n === c.items.length && c.autoSend) {
+    try { return await sendChecklist(req, checklistMessage(req)); } catch (e) { activity(`${req.from.name}: ${e.message}`); }
+  }
+  req.status = 'attention';
+  toast(`${req.from.name}: ${n} of ${c.items.length} ready`, n === c.items.length ? 'Everything is copied. Complete it to send the message.' : 'Some items need you: copy them again, mark them, or complete it with what is done.', () => push('open-request', req.id));
 }
 
 // ---------------------------------------------------------------- IPC
@@ -316,7 +442,8 @@ const api = {
 
   pick: async (kind) => {
     const props = kind === 'dest' || kind === 'folder' ? ['openDirectory', 'createDirectory'] : kind === 'excel' ? ['openFile', 'multiSelections'] : ['openFile', 'multiSelections'];
-    const filters = kind === 'excel' ? [{ name: 'Excel / CSV', extensions: ['xlsx', 'xls', 'xlsm', 'csv'] }] : undefined;
+    const filters = kind === 'excel' ? [{ name: 'Excel / CSV', extensions: ['xlsx', 'xls', 'xlsm', 'csv'] }]
+      : kind === 'sheet' ? [{ name: 'Spreadsheet', extensions: ['xlsx', 'xlsm', 'xls', 'xlsb', 'csv', 'ods'] }] : undefined;
     const r = await dialog.showOpenDialog(win, { properties: kind === 'folder' ? [...props, 'multiSelections'] : props, filters });
     return r.canceled ? [] : r.filePaths;
   },
@@ -381,7 +508,18 @@ const api = {
   },
   removeDriveRoot: (p) => { settings.locate.extraRoots = settings.locate.extraRoots.filter((x) => x !== p); saveSettings(); return api.rescanDrives(); },
 
-  addManualRequest: async ({ text, images = [], from }) => incoming({ channel: from?.channel || 'manual', externalId: `manual:${Date.now()}`, from: { name: from?.name || 'Manual', chat: from?.chat, address: from?.address }, text, images, receivedAt: Date.now() }),
+  addManualRequest: async ({ text, images = [], files = [], from }) => incoming({ channel: from?.channel || 'manual', externalId: `manual:${Date.now()}`, from: { name: from?.name || 'Manual', chat: from?.chat, address: from?.address }, text, images, files, receivedAt: Date.now() }),
+  // A spreadsheet that belongs to a request already here: read into it.
+  attachToRequest: async (id, paths) => {
+    const r = reqById(id);
+    const added = saveFiles(paths);
+    if (!added.length) throw new Error('Only spreadsheets can be added here (Excel, CSV, OpenDocument)');
+    r.files = [...(r.files || []), ...added];
+    r.history.push({ at: Date.now(), text: `Spreadsheet added: ${added.map(fileName).join(', ')}` });
+    await analyseRequest(r);
+    saveRequests();
+    return r;
+  },
   reanalyse: async (id) => { const r = requests.find((x) => x.id === id); await analyseRequest(r); saveRequests(); return r; },
   setRequest: (id, patch) => {
     const r = requests.find((x) => x.id === id);
@@ -452,6 +590,67 @@ const api = {
     return true;
   },
   sendTo: (recipient, text) => notifier.send(recipient, text),
+
+  // Checklist (see draftChecklist): draft from the message, change, approve, then tick off.
+  draftChecklist: (id) => { const r = reqById(id); r.checklist = draftChecklist(r); saveRequests(); return r.checklist; },
+  itemFromRow: (row, ask) => itemFromRow(row, ask),
+  saveChecklist: (id, c) => {
+    const r = reqById(id);
+    if (r.checklist?.state === 'approved') throw new Error('This list is already approved');
+    r.checklist = { state: 'draft', items: c.items || [], dest: c.dest || '', notify: c.notify || [], autoSend: !!c.autoSend, edited: true };
+    saveRequests();
+  },
+  approveChecklist: async (id, c) => {
+    const r = reqById(id);
+    if (c) api.saveChecklist(id, c);
+    const cl = r.checklist;
+    if (!cl?.items.length) throw new Error('The list is empty: add at least one item');
+    if (cl.items.some((i) => i.kind === 'copy') && !cl.dest) throw new Error('Choose the folder to copy to');
+    Object.assign(cl, { state: 'approved', approvedAt: Date.now() });
+    for (const i of cl.items) delete i.candidates;
+    r.history.push({ at: Date.now(), text: `Checklist approved: ${cl.items.length} item${cl.items.length > 1 ? 's' : ''}` });
+    for (const i of cl.items) await queueItem(r, i);
+    await checklistProgress(r);
+    saveRequests();
+    activity(`${r.from.name}: checklist of ${cl.items.length} approved`);
+  },
+  // Your own item: a catalogue row, files or folders you picked, or a to-do with nothing to copy.
+  addChecklistItem: async (id, o = {}) => {
+    const r = reqById(id);
+    r.checklist = r.checklist || { state: 'draft', items: [], dest: settings.recentDest[0] || '', notify: [recipientFor(r)].filter(Boolean), autoSend: settings.notify.autoSend };
+    const c = r.checklist;
+    const item = o.row ? itemFromRow(o.row, o.ask || '')
+      : o.sources?.length ? { id: itemId(), ask: '', title: String(o.title || '').trim() || o.sources.map((s) => path.basename(s)).join(', '), kind: 'copy', manual: true, sources: o.sources, where: path.parse(o.sources[0]).root, backups: '', note: '', status: 'draft' }
+      : { id: itemId(), ask: '', title: String(o.title || '').trim(), kind: 'todo', sources: [], where: '', backups: '', note: '', status: 'draft' };
+    if (!item.title) throw new Error('Write what is to be done');
+    c.items.push(item);
+    if (c.state === 'approved') { c.sentAt = null; await queueItem(r, item); await checklistProgress(r); }
+    else c.edited = true;
+    saveRequests();
+    return item;
+  },
+  // action: copy (again) | done | unavailable (note: why) | reopen | remove
+  checklistItem: async (id, iid, action, note = '') => {
+    const r = reqById(id);
+    const c = r.checklist;
+    const item = c?.items.find((i) => i.id === iid);
+    if (!item) throw new Error('Item not found');
+    const live = item.jobId && queue.get(item.jobId);
+    const busy = item.status === 'copying' && live && !['done', 'failed', 'cancelled'].includes(live.status);
+    if (busy && ['copy', 'remove'].includes(action)) throw new Error('It is still copying: cancel its copy in the queue first');
+    if (action === 'remove') c.items = c.items.filter((i) => i !== item);
+    else if (action === 'copy') await queueItem(r, item);
+    else if (action === 'done') Object.assign(item, { status: 'done', note: String(note) });
+    else if (action === 'unavailable') Object.assign(item, { status: 'unavailable', note: String(note).trim() || 'Not available' });
+    else if (action === 'reopen') Object.assign(item, { status: item.kind === 'todo' ? 'todo' : 'waiting', note: '' });
+    else throw new Error(`Unknown action ${action}`);
+    if (c.state === 'approved') { if (action === 'reopen') c.sentAt = null; await checklistProgress(r); }
+    else c.edited = true;
+    saveRequests();
+  },
+  checklistMessage: (id) => checklistMessage(reqById(id)),
+  // Send now, with what is done and why the rest is not.
+  completeRequest: async (id, text) => { const r = reqById(id); await sendChecklist(r, String(text || '').trim() || checklistMessage(r)); saveRequests(); return true; },
   imageData: (p) => imageData(p),
   pasteImage: () => { const img = clipboard.readImage(); return img.isEmpty() ? null : img.toDataURL(); },
 
@@ -510,8 +709,10 @@ const api = {
     // WhatsApp Web on this PC may have seen the same message already.
     const dup = requests.find((r) => r.channel === msg.channel && (r.from.chat || r.from.name) === chat && text && r.text.includes(text) && Math.abs((msg.receivedAt || Date.now()) - r.lastAt) < 30 * 60000);
     if (dup) { dup.phoneSeen = true; return { id: dup.id, duplicate: true }; }
-    const req = await incoming({ channel: msg.channel === 'email' ? 'email' : 'whatsapp', externalId: `phone:${msg.externalId}`, from: { name: msg.from?.name || chat, chat, address: msg.from?.address, phone: true }, subject: msg.subject || '', text, receivedAt: msg.receivedAt || Date.now(), forced: !!msg.scanned });
-    const r = req || requests.find((x) => x.channel === msg.channel && (x.from.chat || x.from.name) === chat && x.text.includes(text));
+    // files: a spreadsheet the phone could not read itself (.xls, .ods), read here.
+    const files = (Array.isArray(msg.files) ? msg.files : []).filter((f) => f && typeof f.name === 'string' && typeof f.data === 'string').slice(0, 5);
+    const req = await incoming({ channel: msg.channel === 'email' ? 'email' : 'whatsapp', externalId: `phone:${msg.externalId}`, from: { name: msg.from?.name || chat, chat, address: msg.from?.address, phone: true }, subject: msg.subject || '', text, files, receivedAt: msg.receivedAt || Date.now(), forced: !!msg.scanned });
+    const r = req || (text ? requests.find((x) => x.channel === msg.channel && (x.from.chat || x.from.name) === chat && x.text.includes(text)) : null);
     return { id: r?.id || null, status: r?.status || 'ignored' };
   },
 

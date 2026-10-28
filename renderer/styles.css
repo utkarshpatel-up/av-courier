@@ -129,3 +129,21 @@ dialog::backdrop { background: rgba(0, 0, 0, .55); }
 .detail, .split > * { min-width: 0; }
 table.res td { overflow-wrap: break-word; }
 table.res td.nw { white-space: nowrap; }
+
+/* Request checklist */
+.cl { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin-top: 14px; background: var(--panel); }
+.cl-head { display: flex; gap: 10px; align-items: center; margin-bottom: 8px; }
+.cl-item { display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; border-top: 1px solid var(--line); }
+.cl-ic { width: 18px; flex: none; text-align: center; color: var(--muted); }
+.cl-main { flex: 1; min-width: 0; }
+.cl-main select { margin: 4px 0; max-width: 100%; }
+.cl-act { display: flex; gap: 6px; flex: none; align-items: center; }
+.cl-item.done .cl-ic { color: var(--ok); }
+.cl-item.done .cl-main > div:first-child { color: var(--muted); }
+.cl-item.failed .cl-ic, .cl-bad { color: var(--bad); }
+.cl-item.waiting .cl-ic { color: var(--warn); }
+.cl-item.copying .cl-ic { color: var(--accent-2); }
+.cl-item.unavailable .cl-main > div:first-child { color: var(--muted); text-decoration: line-through; }
+.cl-add { margin: 10px 0; flex-wrap: wrap; }
+.cl label { display: block; margin: 8px 0; }
+.chip.sheet { cursor: pointer; }

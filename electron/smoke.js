@@ -77,6 +77,43 @@ async function smoke({ win, api, queue, out }) {
   while (queue.running) await new Promise((r) => setTimeout(r, 200));
   await shot('queue-done', `openJobs.add(S.queue.jobs[0].id); renderQueue()`);
   await shot('newjob', `newJob({ sources: ['C:/Footage/Event A'] })`);
+  await win.webContents.executeJavaScript("document.querySelector('#dlg').close()");
+
+  // A request listing two recordings: a checklist drafted from it, one item of yours added,
+  // approved, copied item by item; one cannot be done, and the message says so.
+  const list = await api.addManualRequest({ text: 'Please send these:\n1) Janmashtami sabha Ahmedabad 16 Aug 2026\n2) Guru Purnima satsang Vadodara 10 Jul 2026', from: { channel: 'whatsapp', name: 'Asha Shah', chat: 'Asha Shah' } });
+  errors.push('DRAFT: ' + JSON.stringify(list.checklist.items.map((i) => [i.ask, i.title, i.sources, i.note])));
+  await api.addChecklistItem(list.id, { title: 'Ask Asha which timecode she needs' });
+  await shot('checklist-draft', `selReq=${JSON.stringify(list.id)}; reqFilter='all'; go('requests'); document.querySelector('.cl').scrollIntoView()`);
+  const c = api.state().requests.find((r) => r.id === list.id).checklist;
+  await api.approveChecklist(list.id, { ...c, dest: path.join(out, 'dest-list'), autoSend: false });
+  while (queue.running || queue.jobs.some((j) => j.status === 'queued')) await new Promise((r) => setTimeout(r, 200));
+  await new Promise((r) => setTimeout(r, 300));
+  const after = api.state().requests.find((r) => r.id === list.id);
+  const todo = after.checklist.items.find((i) => i.kind === 'todo');
+  await api.checklistItem(list.id, todo.id, 'done');
+  const waiting = after.checklist.items.find((i) => i.status === 'waiting');
+  if (waiting) await api.checklistItem(list.id, waiting.id, 'unavailable', 'the drive is at the Vadodara centre');
+  await win.webContents.executeJavaScript('refresh()');
+  await shot('checklist-approved', `selReq=${JSON.stringify(list.id)}; renderRequests(); document.querySelector('.cl').scrollIntoView()`);
+  errors.push('ITEMS: ' + JSON.stringify(api.state().requests.find((r) => r.id === list.id).checklist.items.map((i) => [i.title, i.status, i.note])));
+  errors.push('CHECKLIST MESSAGE: ' + api.checklistMessage(list.id));
+  errors.push('LIST REQUEST STATUS: ' + api.state().requests.find((r) => r.id === list.id).status);
+
+  // The same two recordings asked for in a spreadsheet, with a one-line mail.
+  const sheet = path.join(out, 'Needed footage.xlsx');
+  const swb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(swb, XLSX.utils.aoa_to_sheet([['Event', 'Place', 'Date'], ['Janmashtami Sabha', 'Ahmedabad', new Date(2026, 7, 16)], ['Guru Purnima Satsang', 'Vadodara', new Date(2026, 6, 10)]], { cellDates: true }), 'Sheet1');
+  XLSX.writeFile(swb, sheet);
+  const sr = await api.addManualRequest({ text: 'Please send the list attached', files: [sheet], from: { channel: 'email', name: 'Kiran Desai', address: 'kiran@example.com' } });
+  errors.push('SHEET REQUEST: ' + JSON.stringify({ status: sr.status, files: sr.files.length, rows: Object.values(sr.sheets).map((s) => s.rows), items: sr.checklist.items.map((i) => [i.ask, i.title, i.sources.length ? 'has source' : i.note]) }));
+  // An old .xls the phone could not read: sent by the phone as it is, read here.
+  const xls = XLSX.write(swb, { bookType: 'xls', type: 'base64' });
+  const pr = await api.phoneRequest({ channel: 'whatsapp', externalId: 'scan:1', from: { name: 'Asha Shah', chat: 'Asha Shah' }, text: '', receivedAt: Date.now(), scanned: true, files: [{ name: 'Needed footage.xls', data: xls }] });
+  const preq = api.state().requests.find((r) => r.id === pr.id);
+  errors.push('PHONE XLS: ' + JSON.stringify({ pr, rows: preq && Object.values(preq.sheets).map((s) => s.rows), items: preq?.checklist.items.length }));
+  await win.webContents.executeJavaScript('refresh()');
+  await shot('sheet-request', `selReq=${JSON.stringify(sr.id)}; reqFilter='all'; go('requests'); document.querySelector('main').scrollTop = 0`);
 
   const final = queue.snapshot().jobs.map((j) => `${j.name}: ${j.status} ${j.done}/${j.count}`);
   fs.writeFileSync(path.join(out, 'result.txt'), [`errors: ${errors.length}`, ...errors, ...final, `request status: ${api.state().requests.find((r) => r.id === req.id).status}`].join('\n'));

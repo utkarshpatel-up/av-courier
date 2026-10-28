@@ -157,8 +157,11 @@ document.addEventListener('drop', async (e) => {
   const files = [...e.dataTransfer.files];
   const paths = files.map((f) => window.api.pathFor(f)).filter(Boolean);
   if (page === 'requests') {
+    // A spreadsheet onto an open request adds to it; anywhere else it starts a new request.
+    const sheets = paths.filter(isSheetPath);
+    if (sheets.length && selReq && e.target.closest('#r-detail')) return run(() => call('attachToRequest', selReq, sheets), 'Spreadsheet read into this request');
     const imgs = files.filter((f) => f.type.startsWith('image/'));
-    if (imgs.length) return newRequest({ images: await Promise.all(imgs.map(readImage)) });
+    if (imgs.length || sheets.length) return newRequest({ images: await Promise.all(imgs.map(readImage)), files: sheets });
   }
   if (!paths.length) return;
   const onJob = e.target.closest('.job')?.dataset.id;
@@ -166,6 +169,8 @@ document.addEventListener('drop', async (e) => {
   if (page !== 'queue') go('queue');
   newJob({ sources: paths });
 });
+const isSheetPath = (p) => /\.(xlsx|xlsm|xls|xlsb|csv|ods)$/i.test(p);
+const baseName = (p) => String(p).split(/[\\/]/).pop().replace(/^[0-9a-f]{8} /, '');
 const readImage = (f) => new Promise((r) => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(f); });
 
 window.api.on('add-files', (paths) => { go('queue'); newJob({ sources: paths }); });
@@ -268,7 +273,7 @@ function renderRequests() {
     return `<div class="req ${r.id === selReq ? 'sel' : ''} ${old ? 'old' : ''} ${ticked.has(r.id) ? 'ticked' : ''}" data-id="${r.id}">
       <div class="who">${r.status === 'dismissed' ? '' : `<input type="checkbox" class="tick" title="Tick to mark several as not a request" ${ticked.has(r.id) ? 'checked' : ''}>`}<span class="ch ${r.channel}">${r.channel === 'whatsapp' ? 'WA' : r.channel === 'email' ? 'MAIL' : 'ADDED'}</span>${esc(r.from.name)}<span class="t">${ago(r.receivedAt)}</span></div>
       <div class="sum">${esc(r.analysis?.summary || r.text)}</div>
-      <div class="row" style="margin-top:6px"><span class="badge ${cls}">${label}</span>${r.matches?.length ? `<span class="badge info">${r.matches.length} match${r.matches.length > 1 ? 'es' : ''}</span>` : '<span class="badge">no match</span>'}${r.images?.length || r.hasMedia ? '<span class="badge">picture</span>' : ''}</div>
+      <div class="row" style="margin-top:6px"><span class="badge ${cls}">${label}</span>${r.matches?.length ? `<span class="badge info">${r.matches.length} match${r.matches.length > 1 ? 'es' : ''}</span>` : '<span class="badge">no match</span>'}${r.images?.length || r.hasMedia ? '<span class="badge">picture</span>' : ''}${r.files?.length ? '<span class="badge">spreadsheet</span>' : ''}</div>
     </div>`;
   }).join('') || '<div class="empty">Nothing here</div>';
   renderRequestDetail();
@@ -340,6 +345,8 @@ function renderRequestDetail() {
     <div class="msg">${esc(r.text)}</div>
     ${r.images?.length ? `<div class="thumbs">${r.images.map((p) => `<img src="${fileUrl(p)}" data-open="${esc(p)}">`).join('')}</div>` : ''}
     ${Object.values(r.ocr || {}).some(Boolean) ? `<details class="small" style="margin:4px 0 8px"><summary>Words read from the picture</summary><div class="msg">${esc(Object.values(r.ocr).filter(Boolean).join('\n'))}</div></details>` : ''}
+    <div class="chips" style="margin-bottom:8px">${(r.files || []).map((f) => { const s = r.sheets?.[f]; return `<span class="chip sheet" data-open="${esc(f)}" title="Open the spreadsheet">📊 ${esc(baseName(f))}${s ? ` · ${s.error ? 'could not be read' : `${s.rows} row${s.rows === 1 ? '' : 's'}`}` : ''}</span>`; }).join('')}<button class="btn sm ghost" id="rd-sheet" title="Or drop a spreadsheet on this request">+ Spreadsheet</button></div>
+    ${Object.values(r.sheets || {}).some((s) => s.text) ? `<details class="small" style="margin:4px 0 8px"><summary>Rows read from the spreadsheet</summary><div class="msg">${esc(Object.values(r.sheets).map((s) => s.text).filter(Boolean).join('\n\n'))}</div></details>` : ''}
     ${r.hasMedia && !r.images?.length ? '<p class="small">This message had a picture. Open the chat in the WhatsApp window and use <b>From open WhatsApp chat</b> to bring it in.</p>' : ''}
     <div class="chips" style="margin-bottom:8px">
       <span class="chip">${a.source === 'claude' ? 'Read by Claude' : 'Read by patterns'}</span>
@@ -360,10 +367,13 @@ function renderRequestDetail() {
       <button class="btn ghost" id="rd-close">${OPEN.includes(r.status) || r.status === 'maybe' ? 'Mark done' : 'Reopen'}</button>
       <button class="btn ghost danger" id="rd-del">Delete</button>
     </div>
+    ${checklistHtml(r)}
     <div class="history">${r.history.map((h) => `<div>${new Date(h.at).toLocaleString()} — ${esc(h.text)}</div>`).join('')}</div>`;
 
   const selected = () => $$('#rd-matches input[data-row]:checked').map((c) => r.matches[+c.dataset.row]);
+  wireChecklist(r, selected);
   d.querySelectorAll('[data-open]').forEach((img) => img.onclick = () => call('openPath', img.dataset.open));
+  $('#rd-sheet').onclick = async () => { const p = await call('pick', 'sheet'); if (p.length) run(() => call('attachToRequest', r.id, p), 'Spreadsheet read into this request'); };
   $('#rd-search').onclick = async () => { r.matches = await call('search', $('#rd-q').value); $('#rd-matches').innerHTML = matchTable(r.matches, true); call('setRequest', r.id, { matches: r.matches }); };
   $('#rd-q').onkeydown = (e) => e.key === 'Enter' && $('#rd-search').click();
   $('#rd-re').onclick = () => run(() => call('reanalyse', r.id), 'Read again');
@@ -395,6 +405,103 @@ function renderRequestDetail() {
   };
 }
 
+// ---------------------------------------------------------------- checklist
+// What the request asks for, item by item, with the drive each is on (electron/main.js draftChecklist).
+// A draft until you approve it; then one copy per item, ticked off as each finishes.
+const ISTATUS = { copying: ['⏳', 'Copying'], waiting: ['⚠', 'Waiting'], failed: ['✗', 'Failed'], todo: ['☐', 'To do'], done: ['✓', 'Done'], unavailable: ['—', 'Not available'] };
+let clText = ''; // the "add your own" box, kept across redraws
+
+function checklistHtml(r) {
+  const c = r.checklist;
+  const add = `<div class="row cl-add"><input id="cl-text" placeholder="Add your own: a to-do, or a name for folders you pick" style="flex:1" value="${esc(clText)}">
+      <button class="btn sm" id="cl-todo">+ To-do</button><button class="btn sm" id="cl-folders">+ Folders</button><button class="btn sm" id="cl-files">+ Files</button><button class="btn sm" id="cl-rows" title="The rows ticked in the matches above">+ Ticked rows</button></div>`;
+  if (!c) return `<div class="cl"><div class="cl-head"><b>Checklist</b><span class="muted small">none yet</span><button class="btn sm" id="cl-make">Make from the message</button></div>${add}</div>`;
+  const draft = c.state === 'draft';
+  const n = c.items.filter((i) => i.status === 'done').length;
+  const where = (i) => i.kind === 'todo' ? '' : i.sources?.length ? `From <b>${esc(i.where || i.sources[0])}</b>` : ['draft', 'waiting'].includes(i.status) ? '<span class="cl-bad">Nothing to copy from yet</span>' : '';
+  const acts = (i) => draft ? '<button class="btn sm ghost" data-a="remove" title="Take off the list">✕</button>'
+    : i.status === 'copying' ? '<span class="small muted">in the queue</span>'
+    : ['done', 'unavailable'].includes(i.status) ? '<button class="btn sm ghost" data-a="reopen">Undo</button>'
+    : `${i.kind === 'todo' ? '<button class="btn sm" data-a="done">Done</button>' : '<button class="btn sm" data-a="copy">Copy again</button>'}<button class="btn sm ghost" data-a="unavailable">Can’t do…</button>`;
+  const rows = c.items.map((i) => `<div class="cl-item ${draft ? '' : i.status}" data-item="${esc(i.id)}">
+      <span class="cl-ic" title="${esc(ISTATUS[i.status]?.[1] || '')}">${draft ? (i.kind === 'todo' ? '☐' : '⧉') : ISTATUS[i.status]?.[0] || ''}</span>
+      <div class="cl-main">
+        <div>${esc(i.title)}${i.kind === 'todo' ? ' <span class="badge">to-do</span>' : ''}</div>
+        ${i.ask && i.ask !== i.title ? `<div class="small muted">Asked: ${esc(i.ask)}</div>` : ''}
+        ${draft && i.candidates?.length > 1 ? `<select class="cl-pick" title="Other catalogue rows for this item">${i.candidates.map((m, k) => `<option value="${k}" ${m.title === i.title ? 'selected' : ''}>${esc(m.title)}</option>`).join('')}</select>` : ''}
+        <div class="small">${where(i)}${i.backups ? ` <span class="muted">· ${esc(i.backups)}</span>` : ''}${i.note ? ` · ${esc(i.note)}` : ''}</div>
+      </div>
+      <div class="cl-act">${acts(i)}</div>
+    </div>`).join('') || '<div class="small muted">Empty: add items below.</div>';
+  const who = c.notify?.length ? c.notify.map((x) => `${esc(x.name)} (${x.channel === 'email' ? 'email' : 'WhatsApp'})`).join(', ') : 'no one (added by hand)';
+  const foot = draft
+    ? `<label>Copy everything to<div class="row"><input id="cl-dest" list="cl-recent" style="flex:1" value="${esc(c.dest)}"><button class="btn sm" id="cl-browse">Browse</button></div>
+        <datalist id="cl-recent">${S.settings.recentDest.map((d) => `<option value="${esc(d)}">`).join('')}</datalist></label>
+       <label class="switch"><input type="checkbox" id="cl-auto" ${c.autoSend ? 'checked' : ''}> When every item is done, tell ${who} automatically</label>
+       <div class="row"><button class="btn primary" id="cl-approve">Approve · start ${c.items.filter((i) => i.kind === 'copy').length} cop${c.items.filter((i) => i.kind === 'copy').length === 1 ? 'y' : 'ies'}</button><button class="btn ghost" id="cl-make">Make again from the message</button></div>`
+    : `<div class="row"><b>${n} of ${c.items.length} done</b><span class="small muted">→ ${esc(c.dest || '')}</span><span style="flex:1"></span>
+       ${c.sentAt ? `<span class="small muted">Told ${ago(c.sentAt)} ago</span>` : c.autoSend ? '<span class="small muted">Message goes when all are done</span>' : ''}
+       <button class="btn ${n === c.items.length && !c.sentAt ? 'primary' : ''}" id="cl-complete">${n === c.items.length ? 'Send the message…' : 'Complete and send…'}</button></div>`;
+  return `<div class="cl"><div class="cl-head"><b>Checklist</b><span class="badge ${draft ? 'warn' : n === c.items.length ? 'ok' : 'info'}">${draft ? 'Draft: check, then approve' : 'Approved'}</span></div>
+    ${rows}${add}${foot}</div>`;
+}
+
+function wireChecklist(r, selected) {
+  const c = r.checklist;
+  const save = (cl) => run(() => call('saveChecklist', r.id, cl));
+  const each = (sel, fn) => $$(sel).forEach(fn);
+  if ($('#cl-text')) $('#cl-text').oninput = (e) => { clText = e.target.value; };
+  if ($('#cl-make')) $('#cl-make').onclick = () => (!c || c.state !== 'draft' || !c.edited || confirm('Make the list again from the message? Your changes to it are lost.')) && run(() => call('draftChecklist', r.id));
+  const addItem = async (o) => { if (await run(() => call('addChecklistItem', r.id, o))) clText = ''; };
+  $('#cl-todo').onclick = () => clText.trim() ? addItem({ title: clText }) : toast('Write the to-do first', true);
+  $('#cl-folders').onclick = async () => { const p = await call('pick', 'folder'); if (p.length) addItem({ title: clText, sources: p }); };
+  $('#cl-files').onclick = async () => { const p = await call('pick', 'files'); if (p.length) addItem({ title: clText, sources: p }); };
+  $('#cl-rows').onclick = async () => {
+    const rows = selected();
+    if (!rows.length) return toast('Tick rows in the matches above first', true);
+    for (const row of rows) await addItem({ row });
+  };
+  if (!c) return;
+  each('#r-detail .cl-item', (el) => {
+    const item = c.items.find((i) => i.id === el.dataset.item);
+    const pick = el.querySelector('.cl-pick');
+    if (pick) pick.onchange = async () => {
+      const next = await run(() => call('itemFromRow', item.candidates[+pick.value], item.ask));
+      if (next) save({ ...c, items: c.items.map((i) => (i === item ? { ...next, id: item.id, candidates: item.candidates } : i)) });
+    };
+    el.querySelectorAll('[data-a]').forEach((b) => b.onclick = async () => {
+      const a = b.dataset.a;
+      let note = '';
+      if (a === 'unavailable') { note = await askText(`Why can’t “${item.title}” be done?`, 'This goes in the message, e.g. “drive 112 is damaged”, “not recorded that day”'); if (note == null) return; }
+      run(() => call('checklistItem', r.id, item.id, a, note));
+    });
+  });
+  if (c.state === 'draft') {
+    $('#cl-dest').onchange = (e) => save({ ...c, dest: e.target.value.trim() });
+    $('#cl-browse').onclick = async () => { const [d] = await call('pick', 'dest'); if (d) save({ ...c, dest: d }); };
+    $('#cl-auto').onchange = (e) => save({ ...c, autoSend: e.target.checked });
+    $('#cl-approve').onclick = () => run(() => call('approveChecklist', r.id, { ...c, dest: $('#cl-dest').value.trim() }), 'Approved: copies are in the queue');
+  } else {
+    $('#cl-complete').onclick = async () => {
+      const text = await askText(`Message to ${r.from.name}`, '', await call('checklistMessage', r.id), 'Send');
+      if (text != null) run(() => call('completeRequest', r.id, text), 'Sent');
+    };
+  }
+}
+
+// A small dialog with one text box. Resolves with the text, or null when cancelled.
+function askText(title, hint, value = '', ok = 'OK') {
+  return new Promise((res) => {
+    $('#dlg-body').innerHTML = `<h2>${esc(title)}</h2>${hint ? `<p class="muted small">${esc(hint)}</p>` : ''}<textarea id="ask-text" rows="${value ? 9 : 3}">${esc(value)}</textarea>
+      <div class="dlg-actions"><button class="btn ghost" value="">Cancel</button><button type="button" class="btn primary" id="ask-ok">${esc(ok)}</button></div>`;
+    let done = false;
+    dlg.onclose = () => { if (!done) res(null); };
+    $('#ask-ok').onclick = () => { done = true; const v = $('#ask-text').value; dlg.close(); res(v); };
+    dlg.showModal();
+    $('#ask-text').focus();
+  });
+}
+
 async function replyDialog(r, text) {
   const recipient = await call('recipientFor', r.id);
   $('#dlg-body').innerHTML = `
@@ -418,17 +525,21 @@ async function replyDialog(r, text) {
   };
 }
 
-function newRequest({ text = '', images = [] } = {}) {
-  const st = { images };
+function newRequest({ text = '', images = [], files = [] } = {}) {
+  const st = { images, files };
   const draw = () => {
     $('#dlg-body').innerHTML = `
       <h2>Add a request</h2>
-      <p class="muted">Paste the message or a screenshot (Ctrl+V), or drop pictures here.</p>
+      <p class="muted">Paste the message or a screenshot (Ctrl+V), or drop pictures or a spreadsheet here.</p>
       <div class="grid2"><label>From<input id="nr-name" placeholder="Name"></label>
         <label>Reply on<div class="row"><select id="nr-ch"><option value="manual">Nowhere (I will answer)</option><option value="whatsapp">WhatsApp</option><option value="email">Email</option></select><input id="nr-addr" placeholder="chat name / email" style="flex:1"></div></label></div>
       <textarea id="nr-text" rows="6" placeholder="e.g. Need the Guru Purnima satsang from Vadodara, July">${esc(text)}</textarea>
       <div class="thumbs" style="margin-top:8px">${st.images.map((s) => `<img src="${s}">`).join('')}</div>
+      <div class="chips" style="margin-top:8px">${st.files.map((f, i) => `<span class="chip">📊 ${esc(baseName(f))}<button type="button" data-rmfile="${i}">✕</button></span>`).join('')}<button type="button" class="btn sm" id="nr-sheet">+ Spreadsheet</button></div>
       <div class="dlg-actions"><button class="btn ghost" value="">Cancel</button><button type="button" class="btn primary" id="nr-go">Add and search</button></div>`;
+    const keep = () => { text = $('#nr-text').value; };
+    $('#nr-sheet').onclick = async () => { keep(); st.files.push(...await call('pick', 'sheet')); draw(); };
+    $$('[data-rmfile]').forEach((b) => b.onclick = () => { keep(); st.files.splice(+b.dataset.rmfile, 1); draw(); });
     $('#nr-text').onpaste = async (e) => {
       const img = [...e.clipboardData.items].find((i) => i.type.startsWith('image/'));
       if (img) { e.preventDefault(); text = $('#nr-text').value; st.images.push(await readImage(img.getAsFile())); draw(); }
@@ -437,7 +548,7 @@ function newRequest({ text = '', images = [] } = {}) {
       const ch = $('#nr-ch').value, addr = $('#nr-addr').value.trim(), name = $('#nr-name').value.trim() || addr || 'Manual';
       const from = { channel: ch, name, chat: ch === 'whatsapp' ? addr || name : undefined, address: ch === 'email' ? addr : undefined };
       $('#nr-go').disabled = true; $('#nr-go').textContent = 'Reading…';
-      const req = await run(() => call('addManualRequest', { text: $('#nr-text').value, images: st.images, from }));
+      const req = await run(() => call('addManualRequest', { text: $('#nr-text').value, images: st.images, files: st.files, from }));
       if (req) { dlg.close(); selReq = req.id; reqFilter = 'all'; go('requests'); }
       else { $('#nr-go').disabled = false; $('#nr-go').textContent = 'Add and search'; }
     };
@@ -581,7 +692,7 @@ function renderSettings() {
   const s = S.settings;
   $('#s-conflict').value = s.copy.conflict; $('#s-buffer').value = s.copy.bufferMB; $('#s-verify').checked = s.copy.verify;
   $('#s-autosend').checked = s.notify.autoSend; $('#s-remind').value = s.reminders.afterMin;
-  for (const k of ['copyDone', 'copyFailed', 'located', 'notFound']) $(`#t-${k}`).value = S.templates[k];
+  for (const k of ['copyDone', 'copyFailed', 'located', 'notFound', 'requestDone', 'requestPartial']) $(`#t-${k}`).value = S.templates[k];
   renderPhone();
   renderSync();
   renderIgnored();
@@ -638,7 +749,7 @@ $('#sy-browse').onclick = () => run(async () => { const [d] = await call('pick',
 $('#sy-now').onclick = () => run(async () => { const n = await call('syncNow'); toast(n ? `${n} update(s) from other computers` : 'Up to date'); await refresh(); });
 $('#s-save').onclick = () => run(async () => {
   const templates = {};
-  for (const k of ['copyDone', 'copyFailed', 'located', 'notFound']) templates[k] = $(`#t-${k}`).value;
+  for (const k of ['copyDone', 'copyFailed', 'located', 'notFound', 'requestDone', 'requestPartial']) templates[k] = $(`#t-${k}`).value;
   await call('setSettings', {
     copy: { conflict: $('#s-conflict').value, bufferMB: +$('#s-buffer').value || 4, verify: $('#s-verify').checked },
     notify: { autoSend: $('#s-autosend').checked, templates },

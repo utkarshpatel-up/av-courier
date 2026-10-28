@@ -6,6 +6,9 @@ const TEMPLATES = {
   copyFailed: 'Hi {name}, the copy of {job} stopped: {done} of {files} files copied, {failed} failed. I am looking into it.',
   located: 'Hi {name}, here is where it is:\n{rows}',
   notFound: 'Hi {name}, I could not find "{query}" in the archive. Can you send the date, place or drive/tape number?',
+  // A request with a checklist: one message once every item is through.
+  requestDone: 'Hi {name}, all the data you asked for is ready in {dest}, copied and verified:\n{done}',
+  requestPartial: 'Hi {name}, part of the data you asked for is ready in {dest}, copied and verified:\n{done}\n\nNot done:\n{issues}',
 };
 
 // The requester's own words, so a reply is clearly about their message: WhatsApp's quote

@@ -135,14 +135,14 @@ class Inbox(ctx: Context) {
 
     /** A request read from a picture you took or picked: always kept, whatever the score. */
     @Synchronized
-    fun addScanned(chat: String, text: String): LocalRequest {
+    fun addScanned(chat: String, text: String, how: String = "Read from a picture on the phone"): LocalRequest {
         val at = System.currentTimeMillis()
         val r = LocalRequest(
             id = UUID.randomUUID().toString().take(12), channel = "whatsapp", pkg = "com.whatsapp", chat = chat, sender = chat,
             subject = "", text = text, receivedAt = at, lastAt = at, score = Heuristic.heuristic(text).score,
             status = "new", pcId = null, remindedAt = 0,
             pending = mutableListOf(Pending("$SCAN$at", text, at)),
-            history = mutableListOf("Read from a picture on the phone"),
+            history = mutableListOf(how),
         )
         items.add(0, r)
         saveLocked()

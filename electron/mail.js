@@ -1,6 +1,7 @@
 // Gmail with an App Password: IMAP to watch for requests, SMTP to answer them
 // in the same thread they arrived in.
 const nodemailer = require('nodemailer');
+const { isSheet } = require('./sheet');
 
 const validAddress = (v) => /^[^\s<>@,;]+@[^\s<>@,;]+\.[^\s<>@,;]+$/.test(String(v || ''));
 
@@ -105,6 +106,11 @@ class GmailWatcher {
           .filter((a) => /^image\/(png|jpeg|gif|webp)$/.test(a.contentType) && a.size < 4.5 * 1024 * 1024)
           .slice(0, 5)
           .map((a) => `data:${a.contentType};base64,${a.content.toString('base64')}`);
+        // A list of recordings sent as a spreadsheet: read row by row (sheet.js).
+        const files = mail.attachments
+          .filter((a) => isSheet(a.filename, a.contentType) && a.size < 10 * 1024 * 1024)
+          .slice(0, 5)
+          .map((a) => ({ name: a.filename || 'request.xlsx', data: a.content.toString('base64') }));
         // Keep only the new text, not the quoted thread under it.
         const body = (mail.text || '').split(/\n(?:On .+wrote:|-{2,}\s*Original Message|From: .+)\n/)[0].trim();
         await this.onMessage({
@@ -114,6 +120,7 @@ class GmailWatcher {
           subject: mail.subject || '',
           text: [mail.subject, body].filter(Boolean).join('\n\n'),
           images,
+          files,
           receivedAt: (mail.date || new Date()).getTime(),
           reply: { messageId: mail.messageId, references: [].concat(mail.references || []), subject: mail.subject || '' },
         });

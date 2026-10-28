@@ -169,4 +169,12 @@ function searchRequest(catalog, text, a = heuristic(text), limit = 15) {
   return out;
 }
 
-module.exports = { analyse, heuristic, withClaude, requestItems, searchRequest };
+// What was asked for, item by item, each with its own best catalogue rows: the draft of a
+// request's checklist. One item when the message is not a list.
+function requestAsks(catalog, text, a = heuristic(text), per = 3) {
+  const items = requestItems(text);
+  if (items.length < 2) return [{ ask: a.summary || String(text || '').trim().slice(0, 200), matches: catalog.search({ text: a.searchText || text, ids: a.ids, numbers: a.numbers, dates: a.dates, keywords: a.keywords }, per) }];
+  return items.map((t) => { const h = heuristic(t); return { ask: t.slice(0, 200), matches: catalog.search({ text: t, ids: h.ids, numbers: h.numbers, dates: h.dates }, per) }; });
+}
+
+module.exports = { analyse, heuristic, withClaude, requestItems, searchRequest, requestAsks };

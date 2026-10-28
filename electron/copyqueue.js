@@ -126,7 +126,7 @@ class CopyQueue extends EventEmitter {
   get(id) { return this.jobs.find((j) => j.id === id); }
 
   // held: start on hold with a reason (e.g. waiting for a tape to be ready); you release it.
-  async addJob({ sources, dest, name, notify = [], requestId = null, message = '', options = {}, held = '' }) {
+  async addJob({ sources, dest, name, notify = [], requestId = null, itemId = null, message = '', options = {}, held = '' }) {
     if (!sources?.length) throw new Error('Add at least one file or folder');
     if (!dest) throw new Error('Choose a destination folder');
     // A held job (tape not ready) lists its files only when released: listing reads the source.
@@ -135,7 +135,7 @@ class CopyQueue extends EventEmitter {
     const job = {
       id: uid(),
       name: name || (sources.length === 1 ? path.basename(sources[0]) : `${path.basename(sources[0])} + ${sources.length - 1} more`),
-      sources, dest, files, notify, requestId, message,
+      sources, dest, files, notify, requestId, itemId, message,
       options: { verify: s.verify ?? true, conflict: s.conflict || 'skip-same', ...options },
       status: held ? 'held' : 'queued', holdReason: held || '', needsScan: !!held, createdAt: Date.now(), startedAt: null, finishedAt: null, log: [],
     };
