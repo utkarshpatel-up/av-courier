@@ -25,7 +25,7 @@ points at a connected drive, **Copy selected…** fills in the source for you.
 npm install
 npm start
 npm test
-npm run dist:win    # Windows installer into dist/
+npm run dist:win    # Windows installer + portable .zip into dist/
 npm run dist:mac    # macOS .dmg into dist/ — on a Mac only
 ```
 Settings, queue, requests, reports and encrypted passwords live in
