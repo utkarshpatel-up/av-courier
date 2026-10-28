@@ -147,3 +147,6 @@ table.res td.nw { white-space: nowrap; }
 .cl-add { margin: 10px 0; flex-wrap: wrap; }
 .cl label { display: block; margin: 8px 0; }
 .chip.sheet { cursor: pointer; }
+.rd-tabs { margin: 10px 0 8px; border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+.rd-panel[hidden] { display: none; }
+.rd-panel > .cl { margin-top: 0; }

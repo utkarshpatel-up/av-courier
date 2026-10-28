@@ -35,6 +35,7 @@ let page = localStorage.getItem('page') || 'queue';
 let openJobs = new Set();
 let reqFilter = 'open';
 let selReq = null;
+const reqTabs = {}; // request id -> 'checklist' | 'matches', the tab last chosen on it
 const ticked = new Set(); // requests ticked for "Not a request"
 
 // ---------------------------------------------------------------- navigation
@@ -339,6 +340,10 @@ function renderRequestDetail() {
   if (!r) { d.innerHTML = '<div class="empty">Select a request</div>'; return; }
   const a = r.analysis || {};
   const [label, cls] = RSTATUS[r.status] || [r.status, ''];
+  // Checklist and matches side by side as tabs: the checklist first once there is one.
+  const tab = reqTabs[r.id] || (r.checklist?.items.length ? 'checklist' : 'matches');
+  const cl = r.checklist;
+  const clCount = cl ? (cl.state === 'draft' ? `draft · ${cl.items.length}` : `${cl.items.filter((i) => i.status === 'done').length} of ${cl.items.length} done`) : '';
   d.innerHTML = `
     <div class="title-row"><h2 style="margin:0">${esc(r.from.name)} <span class="ch ${r.channel}">${r.channel}</span></h2><span class="badge ${cls}">${label}</span></div>
     <div class="small">${new Date(r.receivedAt).toLocaleString()}${r.from.address ? ' · ' + esc(r.from.address) : ''}${r.from.chat && r.from.chat !== r.from.name ? ' · chat ' + esc(r.from.chat) : ''}</div>
@@ -355,11 +360,20 @@ function renderRequestDetail() {
       ${(a.keywords || []).map((x) => `<span class="chip">${esc(x)}</span>`).join('')}
     </div>
     ${a.summary && a.source === 'claude' ? `<p><b>${esc(a.summary)}</b></p>` : ''}
-    <div class="row"><input id="rd-q" placeholder="Search the catalogue for this request" style="flex:1" value="${esc(a.searchText || '')}"><button class="btn sm" id="rd-search">Search</button><button class="btn sm ghost" id="rd-re">Read again</button></div>
-    <div id="rd-matches">${matchTable(r.matches || [], true)}</div>
+    <div class="tabs rd-tabs">
+      <button data-tab="checklist" class="${tab === 'checklist' ? 'active' : ''}">Checklist${clCount ? ` (${clCount})` : ''}</button>
+      <button data-tab="matches" class="${tab === 'matches' ? 'active' : ''}">Matches (${(r.matches || []).length})</button>
+    </div>
+    <div class="rd-panel" data-panel="checklist" ${tab === 'checklist' ? '' : 'hidden'}>${checklistHtml(r)}</div>
+    <div class="rd-panel" data-panel="matches" ${tab === 'matches' ? '' : 'hidden'}>
+      <div class="row"><input id="rd-q" placeholder="Search the catalogue for this request" style="flex:1" value="${esc(a.searchText || '')}"><button class="btn sm" id="rd-search">Search</button><button class="btn sm ghost" id="rd-re">Read again</button></div>
+      <div id="rd-matches">${matchTable(r.matches || [], true)}</div>
+      <div class="row">
+        <button class="btn primary" id="rd-locate">Reply with location</button>
+        <button class="btn" id="rd-copy">Copy selected…</button>
+      </div>
+    </div>
     <div class="row">
-      <button class="btn primary" id="rd-locate">Reply with location</button>
-      <button class="btn" id="rd-copy">Copy selected…</button>
       <button class="btn" id="rd-notfound">Reply: not found</button>
       <button class="btn" id="rd-reply">Write reply…</button>
       <span style="flex:1"></span>
@@ -367,9 +381,13 @@ function renderRequestDetail() {
       <button class="btn ghost" id="rd-close">${OPEN.includes(r.status) || r.status === 'maybe' ? 'Mark done' : 'Reopen'}</button>
       <button class="btn ghost danger" id="rd-del">Delete</button>
     </div>
-    ${checklistHtml(r)}
     <div class="history">${r.history.map((h) => `<div>${new Date(h.at).toLocaleString()} — ${esc(h.text)}</div>`).join('')}</div>`;
 
+  d.querySelectorAll('[data-tab]').forEach((b) => b.onclick = () => {
+    reqTabs[r.id] = b.dataset.tab;
+    d.querySelectorAll('[data-tab]').forEach((x) => x.classList.toggle('active', x === b));
+    d.querySelectorAll('[data-panel]').forEach((p) => { p.hidden = p.dataset.panel !== b.dataset.tab; });
+  });
   const selected = () => $$('#rd-matches input[data-row]:checked').map((c) => r.matches[+c.dataset.row]);
   wireChecklist(r, selected);
   d.querySelectorAll('[data-open]').forEach((img) => img.onclick = () => call('openPath', img.dataset.open));

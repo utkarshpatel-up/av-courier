@@ -21,6 +21,7 @@ class RequestActivity : AppCompatActivity() {
     private var localId: String? = null
     private var pcId: String? = null
     private val checked = mutableSetOf<Int>()
+    private var tab: String? = null // "checklist" | "matches"; unset: the checklist when there is one
 
     private val local get() = localId?.let { app.inbox.get(it) }
     private val pcReq get() = pcId?.let { app.pc.request(it) }
@@ -81,14 +82,30 @@ class RequestActivity : AppCompatActivity() {
             else -> "PC not reachable: showing what it last sent. Replies go out from this phone."
         }, 13f, muted = true))
 
+        // The checklist and the matches as tabs, so the list is not lost under the matches.
         val ms = matches
-        if (ms.isNotEmpty()) {
-            content.addView(label("In the catalogue", 17f, bold = true))
-            ms.forEachIndexed { i, m -> content.addView(matchCard(i, m)) }
-        } else if (pcId != null || app.pc.catalog != null) {
-            content.addView(label("No catalogue match. Try the Find tab, or reply “not found”.", muted = true))
+        val cl = pcReq?.optJSONObject("checklist")
+        val items = cl?.optJSONArray("items").objects()
+        val showing = tab ?: if (items.isNotEmpty()) "checklist" else "matches"
+        val count = when {
+            cl == null -> ""
+            cl.str("state") == "draft" -> " (draft · ${items.size})"
+            else -> " (${items.count { it.str("status") == "done" }} of ${items.size} done)"
         }
-        checklist()
+        content.addView(buttons(
+            button("Checklist$count", outlined = showing != "checklist") { tab = "checklist"; render() },
+            button("Matches (${ms.size})", outlined = showing != "matches") { tab = "matches"; render() },
+        ))
+        if (showing == "checklist") checklist()
+        else {
+            if (ms.isNotEmpty()) {
+                content.addView(label("In the catalogue", 17f, bold = true))
+                ms.forEachIndexed { i, m -> content.addView(matchCard(i, m)) }
+            } else if (pcId != null || app.pc.catalog != null) {
+                content.addView(label("No catalogue match. Try the Find tab, or reply “not found”.", muted = true))
+            }
+            if (live && ms.isNotEmpty()) content.addView(buttons(button("Copy selected to…", outlined = true) { copySelected() }))
+        }
 
         content.addView(label("Reply", 17f, bold = true))
         content.addView(buttons(
@@ -97,10 +114,6 @@ class RequestActivity : AppCompatActivity() {
             button("Not found", outlined = true) { notFound() },
             button("Write…", outlined = true) { compose("") },
         ))
-        if (live) {
-            content.addView(label("Copy", 17f, bold = true))
-            content.addView(buttons(button("Copy selected to…") { copySelected() }))
-        }
         content.addView(buttons(button("Done — close it", outlined = true) { close() }))
         val history = (local?.history ?: emptyList()) + (pcReq?.optJSONArray("history").objects().map { it.str("text") })
         if (history.isNotEmpty()) content.addView(label(history.takeLast(8).joinToString("\n"), 12f, muted = true))
@@ -255,7 +268,6 @@ class RequestActivity : AppCompatActivity() {
     private val icons = mapOf("copying" to "⏳", "waiting" to "⚠", "failed" to "✗", "todo" to "☐", "done" to "✓", "unavailable" to "—")
 
     private fun checklist() {
-        content.addView(label("Checklist", 17f, bold = true))
         if (pcId == null) {
             content.addView(label("Made on the PC: it shows here once the request has reached the PC.", 13f, muted = true))
             return
