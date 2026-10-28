@@ -690,7 +690,8 @@ function render() {
   if (page === 'activity') renderActivity();
   const wa = S.status.whatsapp === 'ready' ? 'WhatsApp ✓' : S.settings.whatsapp.enabled ? 'WhatsApp …' : '';
   const gm = S.status.gmail.status === 'watching' ? 'Gmail ✓' : '';
-  $('#foot').innerHTML = `${[wa, gm].filter(Boolean).join(' · ') || 'No channels on'}<br>v${S.version}`;
+  const ph = S.status.phone?.online ? 'Phone ✓' : S.status.phone?.on && S.status.phone?.paired ? 'Phone …' : '';
+  $('#foot').innerHTML = `${[wa, gm, ph].filter(Boolean).join(' · ') || 'No channels on'}<br>v${S.version}`;
 }
 async function refresh() { S = await call('state'); render(); }
 
