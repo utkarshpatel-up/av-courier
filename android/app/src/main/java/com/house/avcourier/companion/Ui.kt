@@ -122,6 +122,7 @@ fun AppCompatActivity.showPcLink(pc: PcLink, paired: Boolean) {
     }
     val s = android.text.SpannableString("● $text")
     s.setSpan(android.text.style.ForegroundColorSpan(dot), 0, 1, 0)
+    s.setSpan(android.text.style.ForegroundColorSpan(Color.WHITE), 1, s.length, 0)
     s.setSpan(android.text.style.StyleSpan(Typeface.BOLD), 0, s.length, 0)
     supportActionBar?.subtitle = s
 }
