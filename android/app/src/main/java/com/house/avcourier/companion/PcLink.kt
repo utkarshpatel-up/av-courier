@@ -231,6 +231,8 @@ class PcLink(private val app: App) {
         try {
             when (type) {
                 "send" -> io.execute { deliver(JSONObject(data)) }
+                // A copy finished on the PC, and whether the requester was told.
+                "notice" -> JSONObject(data).let { Notifications.notice(app, it.str("title"), it.str("body"), it.optBoolean("ok", true)) }
                 "queue", "status" -> {
                     synchronized(this) { state.put(type, JSONObject(data)) }
                     emit(type)

@@ -84,7 +84,7 @@ fun bytes(n: Double): String {
  * Shows [body] under a blue title bar. Android 15+ draws apps edge to edge, so the
  * screen keeps clear of the status bar, camera cut-out and navigation bar itself.
  */
-fun AppCompatActivity.screen(body: View, back: Boolean = false) {
+fun AppCompatActivity.screen(body: View, back: Boolean = false): MaterialToolbar {
     val blue = 0xFF3B82F6.toInt()
     val bar = MaterialToolbar(this).apply {
         setBackgroundColor(blue)
@@ -107,6 +107,23 @@ fun AppCompatActivity.screen(body: View, back: Boolean = false) {
         body.setPadding(body.paddingLeft, body.paddingTop, body.paddingRight, maxOf(i.bottom, kb))
         insets
     }
+    return bar
+}
+
+/**
+ * The PC link under the title, on every screen: a green dot while connected to the PC,
+ * amber while paired but out of reach, grey when not paired. Like the ✓ on the PC.
+ */
+fun AppCompatActivity.showPcLink(pc: PcLink, paired: Boolean) {
+    val (dot, text) = when {
+        pc.connected -> 0xFF4ADE80.toInt() to "PC connected"
+        paired -> 0xFFFBBF24.toInt() to "PC not reachable"
+        else -> 0xFFCBD5E1.toInt() to "Not paired with a PC"
+    }
+    val s = android.text.SpannableString("● $text")
+    s.setSpan(android.text.style.ForegroundColorSpan(dot), 0, 1, 0)
+    s.setSpan(android.text.style.StyleSpan(Typeface.BOLD), 0, s.length, 0)
+    supportActionBar?.subtitle = s
 }
 
 fun Activity.toast(s: String) = Toast.makeText(this, s, Toast.LENGTH_LONG).show()

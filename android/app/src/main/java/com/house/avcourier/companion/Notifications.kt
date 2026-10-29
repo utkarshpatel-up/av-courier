@@ -16,6 +16,7 @@ object Notifications {
     private const val REQUESTS = "requests"
     private const val REMINDERS = "reminders"
     private const val SEND = "send"
+    private const val DONE = "done"
 
     fun createChannels(ctx: Context) {
         val nm = ctx.getSystemService(NotificationManager::class.java)
@@ -23,6 +24,9 @@ object Notifications {
         nm.createNotificationChannel(NotificationChannel(REMINDERS, "Unanswered requests", NotificationManager.IMPORTANCE_DEFAULT))
         nm.createNotificationChannel(NotificationChannel(SEND, "Messages to send", NotificationManager.IMPORTANCE_HIGH).apply {
             description = "A reply that needs one tap on Send in WhatsApp"
+        })
+        nm.createNotificationChannel(NotificationChannel(DONE, "Copies finished", NotificationManager.IMPORTANCE_DEFAULT).apply {
+            description = "A copy on the PC finished, and whether the message reached the requester"
         })
     }
 
@@ -58,6 +62,18 @@ object Notifications {
             .setContentTitle("${due.size} data request${if (due.size > 1) "s" else ""} waiting")
             .setContentText("${due.take(4).joinToString(", ") { it.chat }}. Oldest: $oldestH h")
             .setContentIntent(openApp(ctx))
+            .setAutoCancel(true))
+    }
+
+    /** From the PC: a copy finished, and whether the message was delivered. */
+    fun notice(ctx: Context, title: String, body: String, ok: Boolean) {
+        post(ctx, (title + body).hashCode(), NotificationCompat.Builder(ctx, DONE)
+            .setSmallIcon(R.drawable.ic_stat)
+            .setContentTitle(if (ok) title else "⚠ $title")
+            .setContentText(body.split('\n').drop(1).firstOrNull() ?: body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setPriority(if (ok) NotificationCompat.PRIORITY_DEFAULT else NotificationCompat.PRIORITY_HIGH)
+            .setContentIntent(openApp(ctx, code = 2))
             .setAutoCancel(true))
     }
 

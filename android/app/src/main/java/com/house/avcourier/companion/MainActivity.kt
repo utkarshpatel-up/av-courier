@@ -34,6 +34,7 @@ class MainActivity : AppCompatActivity() {
     private val onPc: (String) -> Unit = { what ->
         if (what == "catalog-loading" && tab == 1) toast("Fetching the catalogue from the PC…")
         if (what == "unpaired") toast("The PC unpaired this phone. Pair it again from the PC tab.")
+        showPcLink(app.pc, app.prefs.paired)
         render()
     }
     private val onInbox: () -> Unit = { runOnUiThread { render() } }
@@ -61,9 +62,12 @@ class MainActivity : AppCompatActivity() {
         }
         content = vbox().apply { setPadding(dp(10), dp(6), dp(10), dp(24)) }
         val scroll = ScrollView(this).apply { addView(content) }
-        screen(vbox(tabs, scroll).apply {
+        val bar = screen(vbox(tabs, scroll).apply {
             scroll.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
         })
+        // A tap on the title bar (with the PC link under it) opens the PC tab.
+        bar.setOnClickListener { tabs.getTabAt(3)?.select() }
+        showPcLink(app.pc, app.prefs.paired)
         if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
             askNotify.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
@@ -90,6 +94,7 @@ class MainActivity : AppCompatActivity() {
         app.pc.listen(onPc)
         app.inbox.listen(onInbox)
         app.pc.start()
+        showPcLink(app.pc, app.prefs.paired)
         refresh()
     }
 

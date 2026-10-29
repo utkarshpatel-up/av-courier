@@ -190,10 +190,53 @@ function recipientChip(r, i) {
   return `<span class="chip">${r.channel === 'whatsapp' ? 'WhatsApp' : 'Email'}: ${esc(r.name)}${r.address ? ` &lt;${esc(r.address)}&gt;` : ''}<button type="button" data-rm="${i}">✕</button></span>`;
 }
 
+// A WhatsApp chat found (or not) in WhatsApp's search, before anything is sent to it.
+function checkedChip(r, i) {
+  const c = r.check || {};
+  const mark = r.channel !== 'whatsapp' ? '' : c.state === 'checking' ? '<span class="muted">checking…</span>'
+    : c.state === 'ok' ? '<span class="ok-t" title="Found in WhatsApp: the message will go to this chat">✓ found</span>'
+    : c.state === 'missing' ? '<span class="bad-t" title="WhatsApp has no chat with exactly this name">✗ not found</span>'
+    : c.state === 'unknown' ? `<span class="warn-t" title="${esc(c.why || '')}">not checked</span>` : '';
+  const alt = c.state === 'missing' && c.similar?.length ? `<div class="small">Did you mean ${c.similar.map((x) => `<button type="button" class="btn sm ghost" data-use="${i}" data-name="${esc(x)}">${esc(x)}</button>`).join(' ')}</div>` : '';
+  return `<span class="chip">${r.channel === 'whatsapp' ? 'WhatsApp' : 'Email'}: ${esc(r.name)}${r.address ? ` &lt;${esc(r.address)}&gt;` : ''} ${mark}<button type="button" data-rm="${i}">✕</button></span>${alt}`;
+}
+
 // o: { sources, dest, name, notify, requestId, message }
 async function newJob(o) {
-  const st = { sources: o.sources || [], dest: o.dest || S.settings.recentDest[0] || '', notify: o.notify || [], autoSend: S.settings.notify.autoSend };
+  const st = { sources: o.sources || [], dest: o.dest || S.settings.recentDest[0] || '', notify: o.notify || [], autoSend: S.settings.notify.autoSend, chats: [], wa: '', checks: [] };
   const body = $('#dlg-body');
+  // The chats in WhatsApp's chat list, then people told before.
+  const options = (ch) => ch === 'email'
+    ? S.settings.contacts.filter((c) => c.address).map((c) => `<option value="${esc(c.address)}">${esc(c.name)}</option>`).join('')
+    : [...st.chats.map((c) => `<option value="${esc(c.chat)}">${c.group ? 'Group' : 'Chat'}</option>`),
+      ...S.settings.contacts.filter((c) => c.chat && !st.chats.some((x) => x.chat === c.chat)).map((c) => `<option value="${esc(c.chat)}">told before</option>`)].join('');
+  const drawWho = () => {
+    $('#j-who').innerHTML = st.notify.map(checkedChip).join('') || '<span class="muted small">No one</span>';
+    body.querySelectorAll('[data-rm]').forEach((b) => b.onclick = () => { st.notify.splice(+b.dataset.rm, 1); drawWho(); });
+    body.querySelectorAll('[data-use]').forEach((b) => b.onclick = () => { const r = st.notify[+b.dataset.use]; r.name = r.chat = b.dataset.name; check(r); });
+  };
+  // Typed into WhatsApp's search and cleared again: no chat is opened, nothing is sent.
+  const check = (r) => {
+    if (r.channel !== 'whatsapp') return Promise.resolve();
+    r.check = { state: 'checking' }; drawWho();
+    const p = call('checkChat', r.chat).then((c) => {
+      r.check = c.found === null ? { state: 'unknown', why: `${c.why}.${S.status.phone?.online ? ' The phone will send it.' : ''}` } : { state: c.found ? 'ok' : 'missing', similar: c.similar };
+    }).catch((e) => { r.check = { state: 'unknown', why: e.message }; }).finally(() => { if ($('#j-who')) drawWho(); });
+    st.checks.push(p);
+    return p;
+  };
+  const addWho = (v) => {
+    v = v.trim(); if (!v) return null;
+    const ch = $('#j-ch').value;
+    const known = S.settings.contacts.find((c) => (c.chat || c.address) === v);
+    const r = known ? { ...known } : ch === 'email' ? { channel: 'email', name: v.split('@')[0], address: v } : { channel: 'whatsapp', name: v, chat: v };
+    if (st.notify.some((x) => (x.chat || x.address) === (r.chat || r.address))) return null;
+    st.notify.push(r);
+    $('#j-to').value = '';
+    drawWho();
+    return check(r);
+  };
+  call('whatsappChats').then((w) => { st.chats = w.chats || []; st.wa = w.status; if ($('#j-contacts') && $('#j-ch').value === 'whatsapp') $('#j-contacts').innerHTML = options('whatsapp'); }).catch(() => {});
   const draw = async () => {
     body.innerHTML = `
       <h2>New copy${o.requestId ? ' for a request' : ''}</h2>
@@ -206,11 +249,11 @@ async function newJob(o) {
       </label>
       <label>Job name<input id="j-name" value="${esc(o.name || '')}" placeholder="defaults to the first folder name"></label>
       <label>Tell when finished</label>
-      <div class="chips" id="j-who" style="margin-bottom:8px">${st.notify.map(recipientChip).join('') || '<span class="muted small">No one</span>'}</div>
+      <div class="chips" id="j-who" style="margin-bottom:8px"></div>
       <div class="row" style="margin-bottom:10px">
         <select id="j-ch"><option value="whatsapp">WhatsApp</option><option value="email">Email</option></select>
-        <input id="j-to" list="j-contacts" placeholder="WhatsApp chat name, or email address" style="flex:1">
-        <datalist id="j-contacts">${S.settings.contacts.map((c) => `<option value="${esc(c.chat || c.address)}">${esc(c.name)}</option>`).join('')}</datalist>
+        <input id="j-to" list="j-contacts" placeholder="Start typing a chat or group name, or an email address" style="flex:1" autocomplete="off">
+        <datalist id="j-contacts">${options('whatsapp')}</datalist>
         <button type="button" class="btn sm" id="j-addwho">Add</button>
       </div>
       <label>Message (blank = the “Copy finished” template)<textarea id="j-msg" rows="3" placeholder="${esc(S.templates.copyDone)}">${esc(o.message || '')}</textarea></label>
@@ -221,18 +264,24 @@ async function newJob(o) {
     $('#j-folders').onclick = async () => { keep(); st.sources.push(...await call('pick', 'folder')); draw(); };
     $('#j-browse').onclick = async () => { keep(); const [d] = await call('pick', 'dest'); if (d) st.dest = d; draw(); };
     body.querySelectorAll('[data-rmsrc]').forEach((b) => b.onclick = () => { keep(); st.sources.splice(+b.dataset.rmsrc, 1); draw(); });
-    body.querySelectorAll('[data-rm]').forEach((b) => b.onclick = () => { keep(); st.notify.splice(+b.dataset.rm, 1); draw(); });
-    $('#j-addwho').onclick = () => {
-      keep();
-      const v = $('#j-to').value.trim(); if (!v) return;
-      const ch = $('#j-ch').value;
-      const known = S.settings.contacts.find((c) => (c.chat || c.address) === v);
-      st.notify.push(known || (ch === 'email' ? { channel: 'email', name: v.split('@')[0], address: v } : { channel: 'whatsapp', name: v, chat: v }));
-      draw();
-    };
+    drawWho();
+    $('#j-ch').onchange = () => { $('#j-contacts').innerHTML = options($('#j-ch').value); };
+    // Picked from the suggestions: added (and checked) straight away.
+    $('#j-to').oninput = (e) => { if (e.inputType === 'insertReplacementText' || !e.inputType) addWho(e.target.value); };
+    $('#j-to').onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); addWho(e.target.value); } };
+    $('#j-addwho').onclick = () => addWho($('#j-to').value);
     $('#j-go').onclick = async () => {
       keep();
-      const id = await run(() => call('addJob', { sources: st.sources, dest: st.dest, name: o.name, notify: st.notify, requestId: o.requestId, message: o.message, autoSend: st.autoSend }));
+      // A name typed but not added yet still counts.
+      addWho($('#j-to').value);
+      $('#j-go').disabled = true; $('#j-go').textContent = 'Checking…';
+      await Promise.all(st.checks);
+      $('#j-go').disabled = false; $('#j-go').textContent = 'Add to queue';
+      const missing = st.notify.filter((r) => r.check?.state === 'missing');
+      if (missing.length && !confirm(`WhatsApp has no chat named ${missing.map((r) => `“${r.name}”`).join(', ')}, so the message would not arrive.\n\nPick the right chat from the suggestions, or press OK to queue anyway.`)) return;
+      if (!st.notify.length && o.message?.trim() && !confirm('You wrote a message but no one is chosen to get it. Queue the copy without telling anyone?')) return;
+      const notify = st.notify.map(({ check, ...r }) => r);
+      const id = await run(() => call('addJob', { sources: st.sources, dest: st.dest, name: o.name, notify, requestId: o.requestId, message: o.message, autoSend: st.autoSend }));
       if (id) { dlg.close(); toast('Added to the queue'); go('queue'); }
     };
   };
@@ -441,6 +490,15 @@ function checklistHtml(r) {
     : i.status === 'copying' ? '<span class="small muted">in the queue</span>'
     : ['done', 'unavailable'].includes(i.status) ? '<button class="btn sm ghost" data-a="reopen">Undo</button>'
     : `${i.kind === 'todo' ? '<button class="btn sm" data-a="done">Done</button>' : '<button class="btn sm" data-a="copy">Copy again</button>'}<button class="btn sm ghost" data-a="unavailable">Can’t do…</button>`;
+  const open = (i) => i.kind === 'copy' && !['done', 'copying', 'unavailable'].includes(i.status);
+  // Every place the drive search found it by name: the same recording can be on several drives.
+  const hits = (i) => !open(i) || !i.hits?.length ? '' : `<div class="cl-hits"><div class="small muted">Found on the drives (${i.hits.length}):</div>${i.hits.map((h, k) => `<div class="cl-hit">
+      <span title="${esc(h.path)}"><b>${esc(h.where)}</b> · ${esc(h.path.split(/[\\/]/).slice(-2).join('/'))}${h.isFile ? ` · ${bytes(h.size)}` : ' · folder'}${h.exact ? '' : ' <span class="warn-t">· date not in the name: check</span>'}</span>
+      <button class="btn sm" data-hit="${k}">Use this</button></div>`).join('')}</div>`;
+  const find = (i) => !open(i) ? '' : `<div class="row cl-find">
+      <button class="btn sm ghost" data-a="find" ${c.searching ? 'disabled' : ''} title="Plugged-in hard drives only, not NAS shares">${i.searchedAt ? 'Search hard drives again' : 'Find on hard drives'}</button>
+      ${nasDrives().length ? `<button class="btn sm ghost" data-a="nas" ${c.searching ? 'disabled' : ''} title="Choose a NAS share, or all connected drives">Search a NAS…</button>` : ''}
+      <button class="btn sm ghost" data-a="link" title="Pick the file or folder yourself, from any drive or share">Link file…</button></div>`;
   const rows = c.items.map((i) => `<div class="cl-item ${draft ? '' : i.status}" data-item="${esc(i.id)}">
       <span class="cl-ic" title="${esc(ISTATUS[i.status]?.[1] || '')}">${draft ? (i.kind === 'todo' ? '☐' : '⧉') : ISTATUS[i.status]?.[0] || ''}</span>
       <div class="cl-main">
@@ -448,6 +506,7 @@ function checklistHtml(r) {
         ${i.ask && i.ask !== i.title ? `<div class="small muted">Asked: ${esc(i.ask)}</div>` : ''}
         ${draft && i.candidates?.length > 1 ? `<select class="cl-pick" title="Other catalogue rows for this item">${i.candidates.map((m, k) => `<option value="${k}" ${m.title === i.title ? 'selected' : ''}>${esc(m.title)}</option>`).join('')}</select>` : ''}
         <div class="small">${where(i)}${i.backups ? ` <span class="muted">· ${esc(i.backups)}</span>` : ''}${i.note ? ` · ${esc(i.note)}` : ''}</div>
+        ${hits(i)}${find(i)}
       </div>
       <div class="cl-act">${acts(i)}</div>
     </div>`).join('') || '<div class="small muted">Empty: add items below.</div>';
@@ -460,8 +519,19 @@ function checklistHtml(r) {
     : `<div class="row"><b>${n} of ${c.items.length} done</b><span class="small muted">→ ${esc(c.dest || '')}</span><span style="flex:1"></span>
        ${c.sentAt ? `<span class="small muted">Told ${ago(c.sentAt)} ago</span>` : c.autoSend ? '<span class="small muted">Message goes when all are done</span>' : ''}
        <button class="btn ${n === c.items.length && !c.sentAt ? 'primary' : ''}" id="cl-complete">${n === c.items.length ? 'Send the message…' : 'Complete and send…'}</button></div>`;
-  return `<div class="cl"><div class="cl-head"><b>Checklist</b><span class="badge ${draft ? 'warn' : n === c.items.length ? 'ok' : 'info'}">${draft ? 'Draft: check, then approve' : 'Approved'}</span></div>
+  const waiting = c.items.filter((i) => open(i) && !i.sources?.length).length;
+  return `<div class="cl"><div class="cl-head"><b>Checklist</b><span class="badge ${draft ? 'warn' : n === c.items.length ? 'ok' : 'info'}">${draft ? 'Draft: check, then approve' : 'Approved'}</span>
+      ${c.searching ? '<span class="badge info">Searching the drives…</span>' : waiting ? `<span style="flex:1"></span><button class="btn sm" id="cl-findall" title="Looks for every item still waiting, by its name, on the plugged-in hard drives (not NAS shares)">Find all ${waiting} on hard drives</button>${nasDrives().length ? '<button class="btn sm ghost" id="cl-findnas">Search a NAS…</button>' : ''}` : ''}</div>
     ${rows}${add}${foot}</div>`;
+}
+
+// NAS shares connected now: searched only when you choose one.
+const nasDrives = () => (S.status.drives?.drives || []).filter((d) => d.network && !d.tape);
+async function pickNas() {
+  const nas = nasDrives();
+  const name = (d) => d.label || d.root;
+  const pick = await choose('Search where?', [...nas.map(name), 'All connected drives']);
+  return !pick ? null : pick === 'All connected drives' ? 'all' : nas.find((d) => name(d) === pick)?.root || null;
 }
 
 function wireChecklist(r, selected) {
@@ -487,13 +557,36 @@ function wireChecklist(r, selected) {
       const next = await run(() => call('itemFromRow', item.candidates[+pick.value], item.ask));
       if (next) save({ ...c, items: c.items.map((i) => (i === item ? { ...next, id: item.id, candidates: item.candidates } : i)) });
     };
+    el.querySelectorAll('[data-hit]').forEach((b) => b.onclick = () => run(() => call('checklistItem', r.id, item.id, 'link', [item.hits[+b.dataset.hit].path]), c.state === 'approved' ? 'Linked: copying it now' : 'Linked'));
     el.querySelectorAll('[data-a]').forEach((b) => b.onclick = async () => {
       const a = b.dataset.a;
+      if (a === 'find' || a === 'nas') {
+        const where = a === 'nas' ? await pickNas() : 'disks';
+        if (!where) return;
+        b.disabled = true; b.textContent = 'Searching…';
+        const n = await run(() => call('findOnDrives', r.id, item.id, where));
+        if (n === 0) toast(`Not found by name${where === 'disks' ? ' on the hard drives. Try Search a NAS…, or' : '. Use'} Link file… to pick it yourself.`, true);
+        return;
+      }
+      if (a === 'link') {
+        const kind = await choose(`Link to “${item.title.slice(0, 60)}”`, ['A file', 'A folder']);
+        if (!kind) return;
+        const p = await call('pick', kind === 'A file' ? 'files' : 'folder');
+        if (p.length) run(() => call('checklistItem', r.id, item.id, 'link', p), c.state === 'approved' ? 'Linked: copying it now' : 'Linked');
+        return;
+      }
       let note = '';
       if (a === 'unavailable') { note = await askText(`Why can’t “${item.title}” be done?`, 'This goes in the message, e.g. “drive 112 is damaged”, “not recorded that day”'); if (note == null) return; }
       run(() => call('checklistItem', r.id, item.id, a, note));
     });
   });
+  const findAll = async (where) => {
+    if (!where) return;
+    const n = await run(() => call('findOnDrives', r.id, null, where));
+    if (n != null) toast(n ? `Found ${n} item${n > 1 ? 's' : ''}: pick where to copy from` : `Nothing more found${where === 'disks' ? ' on the hard drives. Try Search a NAS…, or use' : '. Use'} Link file… on an item.`, !n);
+  };
+  if ($('#cl-findall')) $('#cl-findall').onclick = () => findAll('disks');
+  if ($('#cl-findnas')) $('#cl-findnas').onclick = async () => findAll(await pickNas());
   if (c.state === 'draft') {
     $('#cl-dest').onchange = (e) => save({ ...c, dest: e.target.value.trim() });
     $('#cl-browse').onclick = async () => { const [d] = await call('pick', 'dest'); if (d) save({ ...c, dest: d }); };
@@ -603,6 +696,7 @@ function renderFind() {
     const name = `${esc(d.root.replace(/[\\/]+$/, ''))}${d.label ? ' ' + esc(d.label) : ''}`;
     if (d.tape && d.status !== 'tape-scanned') return `<span class="chip" title="Tapes are never read on their own. Wait until the drive light is steady.">⏸ ${name} · LTO tape, waiting<button class="btn sm primary" data-tape="${esc(d.root)}">Tape ready — scan</button></span>`;
     if (d.status === 'not-ready') return `<span class="chip" title="Windows got no answer from this drive (a tape may still be loading).">⏳ ${name} · not answering<button class="btn sm" data-tape="${esc(d.root)}">Ready — scan</button></span>`;
+    if (d.network) return `<span class="chip" title="NAS shares are not scanned. Search one from a request's checklist (Search a NAS…).">🗄 ${name} · NAS, searched when you choose it</span>`;
     return `<span class="chip">${d.tape ? '📼' : '💽'} ${name} · ${d.recordings} recordings${d.episodes ? `, ${d.episodes} episodes` : ''}</span>`;
   }).join(' ');
   const loaded = new Set((dr.drives || []).filter((d) => d.tape).map((d) => d.label));
@@ -802,6 +896,7 @@ $('#ph-pair').onclick = () => run(async () => {
 
 $('#s-sendto').onclick = () => run(() => call('installSendTo'), 'Added to Send to');
 $('#s-data').onclick = () => call('openData');
+$('#s-diag').onclick = () => run(async () => { const p = await call('saveDiagnostics'); if (p) toast(`Saved: ${p}`); });
 
 // ---------------------------------------------------------------- activity
 function renderActivity() {
@@ -817,11 +912,24 @@ function render() {
   if (page === 'channels') renderChannels();
   if (page === 'settings') renderSettings();
   if (page === 'activity') renderActivity();
-  const wa = S.status.whatsapp === 'ready' ? 'WhatsApp ✓' : S.settings.whatsapp.enabled ? 'WhatsApp …' : '';
-  const gm = S.status.gmail.status === 'watching' ? 'Gmail ✓' : '';
-  const ph = S.status.phone?.online ? 'Phone ✓' : S.status.phone?.on && S.status.phone?.paired ? 'Phone …' : '';
-  $('#foot').innerHTML = `${[wa, gm, ph].filter(Boolean).join(' · ') || 'No channels on'}<br>v${S.version}`;
+  // Green: connected. Amber: on, not connected yet. Red: needs you. A click opens it.
+  const st = S.status;
+  const btn = (go, cls, text, title) => `<button class="foot-btn ${cls}" data-foot="${go}" title="${esc(title)}">${text}</button>`;
+  const wa = st.whatsapp === 'ready' ? btn('whatsapp', 'ok', '✓ WhatsApp', 'Connected. Click to open the WhatsApp window')
+    : st.whatsapp === 'qr' ? btn('whatsapp', 'bad', '! WhatsApp', 'Needs linking: click and scan the QR code')
+    : S.settings.whatsapp.enabled ? btn('whatsapp', 'warn', '… WhatsApp', 'Loading. Click to open the WhatsApp window') : '';
+  const gm = st.gmail.status === 'watching' ? btn('channels', 'ok', '✓ Gmail', 'Watching. Click for the Gmail settings')
+    : st.gmail.status === 'error' ? btn('channels', 'bad', '! Gmail', st.gmail.error || 'Problem') : '';
+  const ph = st.phone?.online ? btn('phone', 'ok', '✓ Phone', 'Connected. Click for the phone settings')
+    : st.phone?.on && st.phone?.paired ? btn('phone', 'warn', '… Phone', 'Paired, not connected now. Click for the phone settings') : '';
+  $('#foot').innerHTML = `<div class="foot-btns">${[wa, gm, ph].filter(Boolean).join('') || btn('channels', '', 'No channels on', 'Set up WhatsApp or Gmail')}</div>v${S.version}`;
 }
+$('#foot').onclick = (e) => {
+  const to = e.target.closest('[data-foot]')?.dataset.foot;
+  if (to === 'whatsapp') call('showWhatsApp');
+  if (to === 'channels') go('channels');
+  if (to === 'phone') { go('settings'); $('#ph-status').closest('.card').scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+};
 async function refresh() { S = await call('state'); render(); }
 
 window.api.on('queue', (q) => { if (!S) return; S.queue = q; renderQueue(); });

@@ -10,8 +10,8 @@ android {
         applicationId = "com.house.avcourier.companion"
         minSdk = 26
         targetSdk = 36
-        versionCode = 6
-        versionName = "0.1.7"
+        versionCode = 7
+        versionName = "0.1.8"
         // Phones only (the picture readers' native code is large): no x86 emulator builds.
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
     }

@@ -9,13 +9,14 @@ const { analyse, searchRequest, requestAsks } = require('./extract');
 const { sendEmail, GmailWatcher } = require('./mail');
 const { WhatsApp } = require('./whatsapp');
 const { Notifier, TEMPLATES, fill, firstName, rowLine } = require('./notifier');
-const { DriveIndex } = require('./locate');
+const { DriveIndex, nameMatcher } = require('./locate');
 const { Remote } = require('./remote');
 const { RequestSync, FolderBackend, GmailBackend, findGoogleDrive } = require('./sync');
 const { GoogleAuth, readClientFile } = require('./google-auth');
 const { senderKey, ignoredReason } = require('./senders');
 const { Ocr } = require('./ocr');
 const { readSheet, isSheet } = require('./sheet');
+const { LogFile, clip } = require('./logfile');
 const os = require('os');
 const QRCode = require('qrcode');
 
@@ -27,6 +28,11 @@ const DATA = app.getPath('userData');
 const ATTACH = path.join(DATA, 'attachments');
 fs.mkdirSync(ATTACH, { recursive: true });
 const file = (n) => path.join(DATA, n);
+// Local log for looking into problems afterwards (electron/logfile.js).
+const logf = new LogFile(path.join(DATA, 'logs'));
+logf.info(`AV Courier ${app.getVersion()} started on ${process.platform} ${require('os').release()}`);
+process.on('uncaughtException', (e) => logf.error('Uncaught', e));
+process.on('unhandledRejection', (e) => logf.error('Unhandled promise', e));
 const readJSON = (n, d) => { try { return JSON.parse(fs.readFileSync(file(n), 'utf8')); } catch { return d; } };
 const writeJSON = (n, v) => { fs.writeFileSync(file(n) + '.tmp', JSON.stringify(v)); fs.renameSync(file(n) + '.tmp', file(n)); };
 
@@ -61,6 +67,7 @@ const saveRequests = () => { sync?.noteChanges(); writeJSON('requests.json', req
 
 let log = readJSON('activity.json', []);
 function activity(text) {
+  logf.info(text);
   log.unshift({ at: Date.now(), text });
   log = log.slice(0, 500);
   writeJSON('activity.json', log);
@@ -98,7 +105,8 @@ queue.on('job-finished', async (job) => {
     if (it) { Object.assign(it, { status: 'waiting', note: 'Copy cancelled' }); await checklistProgress(r); saveRequests(); }
     return;
   }
-  toast(ok ? 'Copy finished' : 'Copy finished with errors', `${job.name}: ${job.done} of ${job.count} files${job.failed ? `, ${job.failed} failed` : ''}`);
+  const summary = `${job.name}: ${job.done} of ${job.count} files${job.failed ? `, ${job.failed} failed` : ''}`;
+  logf.info(`Job ${job.status}`, { id: job.id, name: job.name, dest: job.dest, done: job.done, count: job.count, failed: job.failed, notify: (job.notify || []).map((n) => `${n.channel}:${n.chat || n.address || n.name}`), autoSend: job.autoSend });
   const req = requests.find((r) => r.id === job.requestId);
   // One item of a request's checklist: tick it, and tell the requester once every item is through.
   const item = req?.checklist?.items.find((i) => i.id === job.itemId);
@@ -106,6 +114,7 @@ queue.on('job-finished', async (job) => {
     Object.assign(item, ok ? { status: 'done', note: '' } : { status: 'failed', note: `${job.failed || job.count - job.done} of ${job.count} files failed` });
     req.history.push({ at: Date.now(), text: `${ok ? '✓' : '✗'} ${item.title}` });
     await checklistProgress(req);
+    if (!req.checklist.sentAt) tell(ok ? 'Copy finished' : 'Copy finished with errors', summary, ok, () => push('open-request', req.id));
     return saveRequests();
   }
   if (req) { req.status = ok ? 'ready' : 'attention'; req.history.push({ at: Date.now(), text: `Copy ${ok ? 'finished' : 'had errors'}: ${job.name}` }); }
@@ -114,9 +123,19 @@ queue.on('job-finished', async (job) => {
     const results = await notifier.jobFinished(job);
     if (live) { live.notified = results; queue._changed(true); }
     if (req && results.some((r) => r.ok)) { req.status = 'delivered'; req.history.push({ at: Date.now(), text: `Told ${results.filter((r) => r.ok).map((r) => r.to).join(', ')}` }); }
-  }
+    const told = results.filter((r) => r.ok), failed = results.filter((r) => !r.ok);
+    tell(failed.length ? 'Copy finished, message NOT sent' : 'Copy finished, message delivered',
+      [summary, ...told.map((r) => `✓ Told ${r.to}${r.route ? ` (${ROUTES[r.route] || r.route})` : ''}`), ...failed.map((r) => `✗ ${r.to}: ${r.error}`)].join('\n'), !failed.length, () => push('go', 'queue'));
+  } else if (ok && job.notify?.length) tell('Copy finished', `${summary}\nNot sent automatically: press Notify now to tell ${job.notify.map((n) => n.name).join(', ')}`, true, () => push('go', 'queue'));
+  else tell(ok ? 'Copy finished' : 'Copy finished with errors', `${summary}${ok ? '\nNo one to tell' : ''}`, ok, () => push('go', 'queue'));
   if (req) saveRequests();
 });
+const ROUTES = { 'whatsapp-web': 'WhatsApp on this PC', email: 'email' };
+// An alert here and on the paired phone: the copy is through, and whether the message went.
+function tell(title, body, ok, onClick) {
+  toast(title, body, onClick);
+  remote?.broadcast('notice', { title, body, ok, at: Date.now() });
+}
 
 function writeReport(job) {
   const dir = path.join(DATA, 'reports');
@@ -146,7 +165,7 @@ const sendMail = async (o) => sendEmail({ user: mailUser(), ...(await mailAuth()
 const gmail = new GmailWatcher({ getConfig: mailCfg, getAuth: mailAuth, onMessage: (m) => incoming(m), log: activity });
 const whatsapp = new WhatsApp({
   onMessage: (m) => incoming(m),
-  onStatus: (s) => { push('status', channelStatus()); if (s === 'ready') activity('WhatsApp connected'); },
+  onStatus: (s) => { logf.info(`WhatsApp Web: ${s}`); push('status', channelStatus()); if (s === 'ready') activity('WhatsApp connected'); },
   // Chats with a verified-business badge: their messages are never data requests.
   onVerified: (chats) => {
     const known = new Set(settings.whatsapp.verifiedChats);
@@ -164,6 +183,8 @@ const whatsapp = new WhatsApp({
   log: activity,
   // Last preview seen per chat, so messages that came while the PC was off are caught too.
   store: { load: () => readJSON('whatsapp-seen.json', null), save: (m) => writeJSON('whatsapp-seen.json', m) },
+  // Every chat's name, for picking who to tell when a copy finishes.
+  chatStore: { load: () => readJSON('whatsapp-chats.json', []), save: (l) => writeJSON('whatsapp-chats.json', l) },
 });
 // Day folders ("3034 Dt-15 Sep 2026") on whatever drives are plugged in.
 const drives = new DriveIndex({
@@ -187,7 +208,7 @@ function refreshFound() {
   push('status', channelStatus());
 }
 
-const notifier = new Notifier({ getTemplates: () => settings.notify.templates, sendEmail: sendMail, whatsapp, log: activity });
+const notifier = new Notifier({ getTemplates: () => settings.notify.templates, sendEmail: sendMail, whatsapp, log: activity, trace: logf });
 
 function channelStatus() {
   return {
@@ -346,6 +367,8 @@ const slimRow = ({ found, ...row }) => row;
 const itemTitle = (row) => rowLine(row).split('\n')[0].replace(/^•\s*/, '').replace(/^\((.+?)\)/, '$1');
 const rootName = (p) => String(p || '').replace(/[\\/]+$/, '').split(/[\\/]/).pop() || String(p || '');
 const isDone = (i) => i.status === 'done';
+// The disk a path is on: "E:\\", or the volume's name on a Mac ("/Volumes/Nasshare02/…" -> "Nasshare02").
+const volumeOf = (p) => { const m = /^\/Volumes\/([^/]+)/.exec(String(p)); return m ? m[1] : path.parse(String(p)).root || String(p); };
 
 // Where an item's data is now: a folder on a connected drive, or why it cannot be copied yet.
 function sourceFor(row) {
@@ -353,7 +376,7 @@ function sourceFor(row) {
   const f = drives.find(row)[0];
   if (f?.offline) return { sources: [], where: `Tape ${f.tape}`, note: `Load tape ${f.tape}, then Copy again`, backups };
   if (f) return { sources: [f.session || f.path], where: f.tape ? `Tape ${f.tape}` : rootName(f.root), note: f.exact ? '' : 'Date on disk differs: check it', backups };
-  if (row.path && fs.existsSync(row.path)) return { sources: [row.path], where: path.parse(row.path).root || row.path, note: '', backups };
+  if (row.path && fs.existsSync(row.path)) return { sources: [row.path], where: volumeOf(row.path), note: '', backups };
   return { sources: [], where: '', note: 'Not on a connected drive', backups };
 }
 
@@ -379,6 +402,41 @@ async function queueItem(req, item) {
   Object.assign(item, { jobId: id, status: 'copying', note: job?.holdReason || item.note || '' });
 }
 
+// Items with nothing to copy yet: newly plugged-in drives looked at, then the hard drives
+// searched by name (folder number + date, or episode series + number). NAS shares only when
+// you choose: where = 'disks' (default) | 'all' | one drive's root. Each place found is kept
+// on the item as a choice (item.hits): the same recording may be on several drives.
+// An approved item the index can now place is queued straight away.
+async function findOnDrives(req, ids, where = 'disks') {
+  const c = req.checklist;
+  const open = (i) => i.kind === 'copy' && !['done', 'copying', 'unavailable'].includes(i.status) && (!ids || ids.includes(i.id));
+  if (!c || !c.items.some(open)) return 0;
+  c.searching = true; saveRequests();
+  try {
+    await drives.refresh();
+    for (const i of c.items.filter(open)) {
+      if (i.manual || !i.row) continue;
+      if (c.state === 'approved') await queueItem(req, i); else Object.assign(i, sourceFor(i.row));
+    }
+    const look = c.items.filter((i) => open(i) && (ids || !i.sources?.length));
+    const wants = look.map((i) => ({ key: i.id, test: nameMatcher(i.row) })).filter((w) => w.test);
+    const { hits, timedOut } = wants.length ? await drives.searchNames(wants, { where }) : { hits: {}, timedOut: false };
+    const place = where === 'disks' ? 'the hard drives' : where === 'all' ? 'the connected drives' : volumeOf(where);
+    let n = 0;
+    for (const i of look) {
+      const found = (hits[i.id] || []).map((h) => ({ ...h, where: volumeOf(h.path) }));
+      i.hits = found;
+      i.searchedAt = Date.now();
+      i.searchedIn = place;
+      if (found.length) n++;
+      if (!i.sources?.length) i.note = found.length ? `Found by name in ${found.length} place${found.length > 1 ? 's' : ''} on ${place}: pick one` : wants.some((w) => w.key === i.id) ? `Not found on ${place}: search a NAS, or link the file by hand` : 'Nothing to search by: link the file by hand';
+    }
+    logf.info(`Drive search for ${req.from.name} on ${place}`, { roots: drives.diskRoots(where), items: look.length, found: n, timedOut });
+    if (timedOut) activity(`${req.from.name}: the search of ${place} stopped after 2 minutes; some folders were not looked at`);
+    return n;
+  } finally { c.searching = false; refreshFound(); }
+}
+
 function checklistMessage(req) {
   const c = req.checklist;
   // Your own to-dos are for you: the requester hears only about their data.
@@ -401,8 +459,9 @@ async function sendChecklist(req, text) {
     try { await notifier.send(r, text, req.subject || 'Your data request'); sent.push(r.name); }
     catch (e) { activity(`Could not tell ${r.name}: ${e.message}`); }
   }
-  if (!sent.length) throw new Error('The message could not be sent: see Activity');
+  if (!sent.length) { tell(`${req.from.name}: message NOT sent`, 'The message could not be sent: see Activity', false, () => push('open-request', req.id)); throw new Error('The message could not be sent: see Activity'); }
   const n = c.items.filter(isDone).length;
+  tell(`${req.from.name}: message delivered`, `✓ Told ${sent.join(', ')}: ${n} of ${c.items.length} ready in ${c.dest}`, true, () => push('open-request', req.id));
   c.sentAt = Date.now();
   req.status = n === c.items.length ? 'delivered' : 'replied';
   req.history.push({ at: Date.now(), text: `Told ${sent.join(', ')}: ${n} of ${c.items.length} ready` });
@@ -613,6 +672,8 @@ const api = {
     await checklistProgress(r);
     saveRequests();
     activity(`${r.from.name}: checklist of ${cl.items.length} approved`);
+    // Anything with nothing to copy yet: look for it on every connected disk, in the background.
+    if (cl.items.some((i) => i.status === 'waiting' && i.kind === 'copy')) findOnDrives(r).then(() => saveRequests()).catch((e) => activity(`Drive search: ${e.message}`));
   },
   // Your own item: a catalogue row, files or folders you picked, or a to-do with nothing to copy.
   addChecklistItem: async (id, o = {}) => {
@@ -620,7 +681,7 @@ const api = {
     r.checklist = r.checklist || { state: 'draft', items: [], dest: settings.recentDest[0] || '', notify: [recipientFor(r)].filter(Boolean), autoSend: settings.notify.autoSend };
     const c = r.checklist;
     const item = o.row ? itemFromRow(o.row, o.ask || '')
-      : o.sources?.length ? { id: itemId(), ask: '', title: String(o.title || '').trim() || o.sources.map((s) => path.basename(s)).join(', '), kind: 'copy', manual: true, sources: o.sources, where: path.parse(o.sources[0]).root, backups: '', note: '', status: 'draft' }
+      : o.sources?.length ? { id: itemId(), ask: '', title: String(o.title || '').trim() || o.sources.map((s) => path.basename(s)).join(', '), kind: 'copy', manual: true, sources: o.sources, where: volumeOf(o.sources[0]), backups: '', note: '', status: 'draft' }
       : { id: itemId(), ask: '', title: String(o.title || '').trim(), kind: 'todo', sources: [], where: '', backups: '', note: '', status: 'draft' };
     if (!item.title) throw new Error('Write what is to be done');
     c.items.push(item);
@@ -629,7 +690,10 @@ const api = {
     saveRequests();
     return item;
   },
-  // action: copy (again) | done | unavailable (note: why) | reopen | remove
+  // Look for one item (iid) or every item still waiting (no iid) on the connected disks.
+  // where: 'disks' (hard drives, the default) | 'all' | one NAS share's root.
+  findOnDrives: async (id, iid, where) => { const n = await findOnDrives(reqById(id), iid ? [iid] : null, where || 'disks'); saveRequests(); return n; },
+  // action: copy (again) | done | unavailable (note: why) | reopen | remove | link (note: the paths to copy from)
   checklistItem: async (id, iid, action, note = '') => {
     const r = reqById(id);
     const c = r.checklist;
@@ -637,8 +701,16 @@ const api = {
     if (!item) throw new Error('Item not found');
     const live = item.jobId && queue.get(item.jobId);
     const busy = item.status === 'copying' && live && !['done', 'failed', 'cancelled'].includes(live.status);
-    if (busy && ['copy', 'remove'].includes(action)) throw new Error('It is still copying: cancel its copy in the queue first');
+    if (busy && ['copy', 'remove', 'link'].includes(action)) throw new Error('It is still copying: cancel its copy in the queue first');
     if (action === 'remove') c.items = c.items.filter((i) => i !== item);
+    else if (action === 'link') {
+      // A file or folder picked by hand, or one of the places the drive search found.
+      const sources = [].concat(note || []).map(String).filter((p) => fs.existsSync(p));
+      if (!sources.length) throw new Error('That file is not reachable from this computer now');
+      Object.assign(item, { sources, manual: true, where: volumeOf(sources[0]), note: '', hits: undefined });
+      r.history.push({ at: Date.now(), text: `Linked ${sources.map((p) => path.basename(p)).join(', ')} to “${item.title.slice(0, 60)}”` });
+      if (c.state === 'approved') { c.sentAt = null; await queueItem(r, item); }
+    }
     else if (action === 'copy') await queueItem(r, item);
     else if (action === 'done') Object.assign(item, { status: 'done', note: String(note) });
     else if (action === 'unavailable') Object.assign(item, { status: 'unavailable', note: String(note).trim() || 'Not available' });
@@ -679,6 +751,29 @@ const api = {
     return incoming({ channel: 'whatsapp', externalId: `wa-import:${r.chat}:${Date.now()}`, from: { name: r.chat, chat: r.chat }, text: r.text, images: r.images, receivedAt: Date.now() });
   },
   testWhatsApp: (chat) => whatsapp.send(chat, 'Test from AV Courier ✓'),
+  // Who to tell: the chats seen in WhatsApp's chat list.
+  whatsappChats: () => ({ status: whatsapp.status, chats: whatsapp.chats }),
+  // Finds the chat without opening it or sending anything.
+  checkChat: async (chat) => { const r = await whatsapp.checkChat(chat); logf.info(`Chat check “${chat}”`, r); return r; },
+  // Recent logs, settings (no secrets) and state in one text file to send for a diagnosis.
+  saveDiagnostics: async () => {
+    const r = await dialog.showSaveDialog(win, { title: 'Save diagnostics', defaultPath: path.join(app.getPath('desktop'), `AV Courier diagnostics ${new Date().toISOString().slice(0, 10)}.txt`), filters: [{ name: 'Text', extensions: ['txt'] }] });
+    if (r.canceled || !r.filePath) return null;
+    const jobs = queue.snapshot().jobs.map((j) => ({ name: j.name, status: j.status, dest: j.dest, count: j.count, done: j.done, failed: j.failed, error: j.error, notify: j.notify, autoSend: j.autoSend, notified: j.notified }));
+    const reqs = requests.slice(0, 30).map((x) => ({ id: x.id, channel: x.channel, from: x.from, status: x.status, text: clip(x.text, 200), history: x.history.slice(-10),
+      checklist: x.checklist && { state: x.checklist.state, dest: x.checklist.dest, notify: x.checklist.notify, sentAt: x.checklist.sentAt, items: x.checklist.items.map((i) => ({ title: i.title, status: i.status, kind: i.kind, sources: i.sources, note: i.note, hits: i.hits?.length })) } }));
+    const text = [
+      `AV Courier ${app.getVersion()} · ${process.platform} ${os.release()} · ${new Date().toString()}`,
+      '', '----- status', JSON.stringify(channelStatus(), null, 1),
+      '', '----- settings', JSON.stringify({ ...settings, email: { ...settings.email, googleClientId: settings.email.googleClientId ? 'set' : '' } }, null, 1),
+      '', '----- queue', JSON.stringify(jobs, null, 1),
+      '', '----- requests (latest 30)', JSON.stringify(reqs, null, 1),
+      '', '----- log (7 days)', logf.recent(7),
+    ].join('\n');
+    fs.writeFileSync(r.filePath, text);
+    shell.showItemInFolder(r.filePath);
+    return r.filePath;
+  },
   checkGmail: () => gmail.check(),
   // Sign in with Google: opens Google's page in the browser; the account becomes the Gmail address.
   googleSignIn: async () => {
@@ -785,7 +880,8 @@ function rememberContact(c) {
 
 ipcMain.handle('call', async (_e, method, ...args) => {
   if (!Object.hasOwn(api, method)) throw new Error(`Unknown call ${method}`);
-  return api[method](...args);
+  try { return await api[method](...args); }
+  catch (e) { logf.warn(`${method} failed: ${e.message}`, e.stack); throw e; }
 });
 
 // Explorer: right-click → Send to → AV Courier.

@@ -95,6 +95,20 @@ async function volumeInfo(letters) {
   return map;
 }
 
+// Network shares mounted on a Mac or Linux (smb, afp, nfs, webdav): "//nas/Share01 on /Volumes/Share01 (smbfs, …)".
+async function networkMounts() {
+  if (process.platform === 'win32') return new Set();
+  const out = await new Promise((res) => execFile('mount', [], { timeout: 10000 }, (err, o) => res(err ? '' : String(o))));
+  const set = new Set();
+  for (const line of out.split('\n')) {
+    const m = /^(.+?) on (.+?) \(([^,)]+)/.exec(line);
+    if (m && /^(smbfs|afpfs|nfs|webdav|cifs|smb3?|fuse\.sshfs|sshfs)$/i.test(m[3].trim())) set.add(m[2]);
+  }
+  return set;
+}
+// \\server\share, or a mapped network drive letter (Windows says so), or a mounted share.
+const isNetworkPath = (p) => /^\\\\/.test(p) || /^\/\//.test(p);
+
 const isTape = (info) => !!info && (/ltfs/i.test(info.fs || '') || /(^|[^a-z])lto([^a-z]|$)/i.test(info.label || ''));
 
 // Walk one root and collect recordings (raw) and episodes. Day folders keep their
@@ -186,7 +200,7 @@ class DriveIndex {
   status() {
     return {
       scannedAt: this.scannedAt,
-      drives: [...this.drives.values()].map((d) => ({ root: d.root, label: d.label, tape: d.tape, status: d.status, recordings: d.items?.length || 0, episodes: d.episodes?.length || 0, scannedAt: d.scannedAt })),
+      drives: [...this.drives.values()].map((d) => ({ root: d.root, label: d.label, tape: d.tape, network: !!d.network, status: d.status, recordings: d.items?.length || 0, episodes: d.episodes?.length || 0, scannedAt: d.scannedAt })),
       tapes: Object.entries(this.tapes).map(([label, t]) => ({ label, scannedAt: t.scannedAt, recordings: t.items.length, episodes: t.episodes.length })),
       recordings: this.items.length,
       episodes: this.episodes.length,
@@ -212,21 +226,26 @@ class DriveIndex {
     for (const root of [...this.drives.keys()]) if (!all.includes(root)) this.drives.delete(root);
     const fresh = letters.filter((r) => force || !this.drives.has(r));
     const info = await volumeInfo(fresh);
+    const net = await networkMounts();
+    // Windows is asked about each letter; on a Mac whatever is under /Volumes is mounted and ready.
+    const win = process.platform === 'win32';
     for (const root of fresh) {
       const v = info[root];
       const tape = isTape(v) || (cfg.tapeRoots || []).includes(root);
       const prev = this.drives.get(root);
-      this.drives.set(root, { ...(prev || {}), root, label: v?.label || prev?.label || '', fs: v?.fs || '', tape,
-        status: prev?.items && !force ? prev.status : tape ? 'tape-waiting' : v ? 'disk' : 'not-ready' });
+      this.drives.set(root, { ...(prev || {}), root, label: v?.label || prev?.label || (win ? '' : path.basename(root)), fs: v?.fs || '', tape,
+        network: !!v?.network || net.has(root),
+        status: prev?.items && !force ? prev.status : tape ? 'tape-waiting' : v || !win ? 'disk' : 'not-ready' });
     }
     for (const root of extra) {
       if (this.drives.has(root) && !force) continue;
       const tape = (cfg.tapeRoots || []).map((r) => path.resolve(r)).includes(root);
-      this.drives.set(root, { ...(this.drives.get(root) || {}), root, label: (cfg.tapeLabels || {})[root] || '', tape, status: tape ? 'tape-waiting' : 'disk' });
+      this.drives.set(root, { ...(this.drives.get(root) || {}), root, label: (cfg.tapeLabels || {})[root] || '', tape, network: isNetworkPath(root) || net.has(root), status: tape ? 'tape-waiting' : 'disk' });
     }
     if (scanDisks) {
       for (const d of this.drives.values()) {
-        if (d.tape || d.status === 'not-ready' || (d.items && !force)) continue;
+        // NAS shares are big and slow: only searched when you choose one (searchNames).
+        if (d.tape || d.network || d.status === 'not-ready' || (d.items && !force)) continue;
         await this._scanOne(d);
       }
     }
@@ -313,9 +332,95 @@ class DriveIndex {
   }
 
   _tapeOf(root) { const d = this.drives.get(root); return d?.tape ? d.label || root : ''; }
+
+  // Where to search by name. where: 'disks' (hard drives plugged in, the default: no NAS),
+  // 'all' (NAS shares too), or one drive's root. Never tapes, never this computer's own system disk.
+  diskRoots(where = 'disks') {
+    return [...this.drives.values()]
+      .filter((d) => !d.tape && d.status !== 'not-ready' && (where === 'all' ? true : where === 'disks' ? !d.network : d.root === where))
+      .map((d) => d.root).filter((r) => {
+        try { const real = fs.realpathSync(r); return /^[A-Z]:\\$/i.test(r) || real !== path.parse(real).root; } catch { return false; }
+      });
+  }
+
+  // Name search, one at a time like the scans. opts.where: see diskRoots.
+  searchNames(wants, opts = {}) { return this._queue(() => searchNames(this.diskRoots(opts.where), wants, opts)); }
+
+  // Drives plugged in since the last look are listed (and hard drives scanned); nothing else is read again.
+  refresh() { return this._queue(() => this._refreshList()); }
 }
 
 const strip = ({ offline, tape, ...x }) => x;
+
+// ---------------------------------------------------------------- search by name
+// For a checklist item the index cannot place (a file on a NAS, an edit export, a copy
+// on another disk): every file or folder whose name carries its folder number and date,
+// or its episode series and number, on every connected disk. The same recording can be
+// on several drives, so all of them are listed.
+const MONTH_RE = '(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*';
+function datesIn(name) {
+  const out = new Set();
+  const y4 = (y) => (+y < 100 ? 2000 + +y : +y);
+  const add = (y, m, d) => { if (m >= 1 && m <= 12 && d >= 1 && d <= 31) out.add(`${y4(y)}-${pad(m)}-${pad(d)}`); };
+  for (const m of name.matchAll(new RegExp(`(\\d{1,2})[-\\s.]+${MONTH_RE}[-\\s.,']+(\\d{2,4})(?!\\d)`, 'gi'))) add(m[3], MONTHS[m[2].toLowerCase()], +m[1]);
+  for (const m of name.matchAll(/(?<!\d)(\d{4})[-_.](\d{1,2})[-_.](\d{1,2})(?!\d)/g)) add(m[1], +m[2], +m[3]);
+  for (const m of name.matchAll(/(?<!\d)(\d{1,2})[-_.](\d{1,2})[-_.](\d{2,4})(?!\d)/g)) add(m[3], +m[2], +m[1]);
+  return out;
+}
+
+// row -> (name) => null | { exact }. Null when the row has nothing to look for by name.
+function nameMatcher(row) {
+  if (!row) return null;
+  if (row.kind === 'episode') {
+    const key = seriesKey(row.series).replace(/^dd/, '');
+    const n = String(+row.episodeNo || '');
+    if (!key || !n) return null;
+    const num = new RegExp(`(^|\\D)0*${n}(\\D|$)`);
+    return (name) => (seriesKey(name).includes(key) && num.test(name) ? { exact: true } : null);
+  }
+  const n = String(+(row.folder || row.ser?.number) || '');
+  if (!n || n === '0') return null;
+  const lead = new RegExp(`^0*${n}(?!\\d)`);
+  return (name) => {
+    if (!lead.test(name.trim())) return null;
+    const ds = datesIn(name);
+    if (row.iso && ds.size) return ds.has(row.iso) ? { exact: true } : null;
+    return { exact: false }; // number only: check before copying
+  };
+}
+
+// wants: [{ key, test(name) }]. Resolves { key: [{ path, root, isFile, size, exact }] }.
+// Tapes are never read here; stops after `timeMs` and says so.
+async function searchNames(roots, wants, { depth = 9, timeMs = 120000, maxHits = 25 } = {}) {
+  const hits = Object.fromEntries(wants.map((w) => [w.key, []]));
+  const end = Date.now() + timeMs;
+  let timedOut = false;
+  const walk = async (dir, d, root) => {
+    if (Date.now() > end) { timedOut = true; return; }
+    let entries;
+    try { entries = await fsp.readdir(dir, { withFileTypes: true }); } catch { return; }
+    for (const e of entries) {
+      if (SKIP.test(e.name)) continue;
+      const isDir = e.isDirectory();
+      if (!isDir && !(e.isFile() && VIDEO.test(e.name))) continue;
+      const p = path.join(dir, e.name);
+      let matched = false;
+      for (const w of wants) {
+        const m = hits[w.key].length < maxHits && w.test(e.name.replace(VIDEO, ''));
+        if (!m) continue;
+        matched = true;
+        let size = 0;
+        if (!isDir) try { size = (await fsp.stat(p)).size; } catch { /* gone */ }
+        hits[w.key].push({ path: p, root, isFile: !isDir, size, exact: m.exact });
+      }
+      // A matching folder is the recording: its insides are not searched again.
+      if (isDir && !matched && d < depth) await walk(p, d + 1, root);
+    }
+  };
+  for (const root of roots) await walk(root, 1, root);
+  for (const k of Object.keys(hits)) hits[k].sort((a, b) => b.exact - a.exact);
+  return { hits, timedOut };
+}
 
 // Inside a day folder each session has its own folder ("… Satsang E. Dt-16-Aug-26 …",
 // "02 Adalaj … Parayan Eve. Dt-10-09-18 …"). Picked only when exactly one fits.
@@ -336,4 +441,4 @@ function sessionFolder(dayPath, session, subs) {
   return hits.length === 1 ? path.join(dayPath, hits[0]) : null;
 }
 
-module.exports = { DriveIndex, parseDayFolder, sessionFolder, context, clues, isTape };
+module.exports = { DriveIndex, nameMatcher, datesIn, searchNames, networkMounts, parseDayFolder, sessionFolder, context, clues, isTape };

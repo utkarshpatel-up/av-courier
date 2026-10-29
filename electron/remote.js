@@ -15,7 +15,7 @@ const PHONE_CALLS = new Set([
   'search', 'reanalyse', 'setRequest', 'recipientFor', 'locatedMessage', 'notFoundMessage', 'replyToRequest',
   'addJob', 'pause', 'resume', 'skip', 'holdJob', 'cancelJob', 'retryJob', 'moveJob', 'notifyJob',
   'previewJobMessage', 'scanTape', 'rescanDrives', 'addManualRequest', 'phoneRequest', 'dismissRequests', 'ignoreSenders',
-  'draftChecklist', 'itemFromRow', 'saveChecklist', 'setChecklist', 'pickCandidate', 'approveChecklist', 'addChecklistItem', 'checklistItem', 'checklistMessage', 'completeRequest',
+  'draftChecklist', 'itemFromRow', 'saveChecklist', 'setChecklist', 'pickCandidate', 'approveChecklist', 'addChecklistItem', 'checklistItem', 'checklistMessage', 'completeRequest', 'findOnDrives',
 ]);
 
 const CODE_TTL = 10 * 60000;

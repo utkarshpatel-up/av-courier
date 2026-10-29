@@ -40,12 +40,14 @@ function rowLine(r) {
 
 class Notifier {
   // phone: the paired Android phone ({ available(), sendViaPhone(to, text, subject) }), optional.
-  constructor({ getTemplates, sendEmail, whatsapp, phone, log }) {
+  // trace: the local log file (electron/logfile.js): every send, its route and any error.
+  constructor({ getTemplates, sendEmail, whatsapp, phone, log, trace }) {
     this.getTemplates = getTemplates;
     this.sendEmail = sendEmail;
     this.whatsapp = whatsapp;
     this.phone = phone;
     this.log = log;
+    this.trace = trace;
   }
 
   template(key) { return (this.getTemplates() || {})[key] || TEMPLATES[key]; }
@@ -63,6 +65,19 @@ class Notifier {
   // WhatsApp goes through WhatsApp Web on this PC; when that is not linked or
   // fails, the paired phone sends it instead.
   async send(recipient, text, subject = 'Your data request') {
+    const to = `${recipient.channel}:${recipient.chat || recipient.address || recipient.name}`;
+    this.trace?.info(`Sending to ${to}`, { whatsappWeb: this.whatsapp?.status, phone: !!this.phone?.available(), text: String(text).slice(0, 120) });
+    try {
+      const route = await this._send(recipient, text, subject);
+      this.trace?.info(`Sent to ${to} via ${route}`);
+      return route;
+    } catch (e) {
+      this.trace?.error(`Could not send to ${to}: ${e.message}`);
+      throw e;
+    }
+  }
+
+  async _send(recipient, text, subject) {
     const phoneUp = () => !!this.phone?.available();
     if (recipient.channel === 'phone') {
       if (!phoneUp()) throw new Error('No phone connected');

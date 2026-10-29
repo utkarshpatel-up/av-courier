@@ -93,7 +93,9 @@ const SWEEP = `(async () => {
       const recent = lines.some((l) => /^\\d{1,2}:\\d{2}(\\s?[ap]m)?$/i.test(l) || /^yesterday$/i.test(l));
       // Verified businesses carry a badge by their name (icon or label saying "verified").
       const verified = !!row.querySelector('[data-icon*="verified" i], [aria-label*="verified" i]');
-      seen.set(chat, { chat, preview, unread, mine, self, today: recent, verified });
+      // Groups show a group picture placeholder, or "Name: text" previews from members.
+      const group = !!row.querySelector('[data-icon*="group" i]') || (/^[^:]{1,40}:\\s/.test(preview) && !/^you:/i.test(preview));
+      seen.set(chat, { chat, preview, unread, mine, self, today: recent, verified, group });
     }
   };
   const top = pane.scrollTop;
@@ -108,6 +110,14 @@ const SWEEP = `(async () => {
   pane.scrollTop = top;
   return [...seen.values()];
 })()`;
+
+// Chat titles in the search results for what was typed into the search box.
+const SEARCHED = `(() => [...new Set([...document.querySelectorAll('#pane-side span[title]')].map((s) => s.getAttribute('title')).filter(Boolean))])()`;
+const CLEAR_SEARCH = `(() => {
+  const box = document.querySelector('#side div[contenteditable="true"], #side input[type="text"], div[contenteditable="true"][data-tab="3"]');
+  if (!box) return false; box.focus(); document.execCommand('selectAll'); document.execCommand('delete'); box.blur(); return true;
+})()`;
+const norm = (s) => String(s || '').replace(/[​-‏‪-‮⁦-⁩﻿]/g, '').trim().toLowerCase();
 
 // The last N messages of the open chat, with images as data URLs.
 const OPEN_CHAT = (n) => `(async () => {
@@ -138,7 +148,8 @@ class WhatsApp {
   // store: { load() -> { chat: lastPreview }, save(map) } remembers what the chat list
   // showed last time, so messages that came while the PC was off are still caught.
   // onVerified(chats): chats shown with a verified-business badge.
-  constructor({ onMessage, onStatus, onVerified, log, store, sweepEveryMin = 2 }) {
+  // chatStore: { load() -> [{ chat, group }], save(list) } the chat list, for picking who to tell.
+  constructor({ onMessage, onStatus, onVerified, log, store, chatStore, sweepEveryMin = 2 }) {
     this.onMessage = onMessage;
     this.onVerified = onVerified;
     this.onStatus = onStatus;
@@ -151,6 +162,8 @@ class WhatsApp {
     this._seen = new Map();
     this._last = (store && store.load()) || null; // null = never swept on this PC
     this._sweptAt = 0;
+    this.chatStore = chatStore;
+    this.chats = (chatStore && chatStore.load()) || [];
   }
 
   // Compare every chat's latest preview with last time; new ones from others (or
@@ -161,6 +174,8 @@ class WhatsApp {
     const first = this._last === null;
     const last = this._last || {};
     let n = 0;
+    const list = rows.filter((r) => !r.self).map((r) => ({ chat: r.chat, group: !!r.group }));
+    if (list.length) { this.chats = list; this.chatStore?.save(list); }
     const verified = rows.filter((r) => r.verified).map((r) => r.chat);
     if (verified.length) this.onVerified?.(verified);
     for (const r of rows) {
@@ -265,6 +280,34 @@ class WhatsApp {
     if (!r.chat) throw new Error('Open the chat in the WhatsApp window first');
     const incoming = r.messages.filter((m) => !m.out);
     return { chat: r.chat, text: incoming.map((m) => `${m.meta}${m.text}`.trim()).join('\n'), images: incoming.flatMap((m) => m.images).slice(0, 5) };
+  }
+
+  // Is there a chat with exactly this name? Typed into the search box and cleared again:
+  // no chat is opened and nothing is sent. Resolves { found, similar: [names] },
+  // or { found: null, why } when WhatsApp Web is not linked on this PC.
+  checkChat(chat) {
+    const run = this.sending.then(() => this._checkChat(String(chat || '').trim()));
+    this.sending = run.catch(() => {});
+    return run;
+  }
+
+  async _checkChat(chat) {
+    if (!chat) return { found: false, similar: [] };
+    if (this.status !== 'ready') return { found: null, similar: [], why: this.status === 'qr' ? 'WhatsApp Web needs to be linked: scan the QR code' : 'WhatsApp Web is not open on this PC' };
+    const box = await this._js(CLEAR_SEARCH.replace('box.blur(); ', ''));
+    if (!box) return { found: null, similar: [], why: 'WhatsApp search box not found' };
+    await this.win.webContents.insertText(chat);
+    let titles = [];
+    for (let i = 0; i < 12; i++) {
+      await sleep(300);
+      titles = await this._js(SEARCHED);
+      if (titles.some((t) => t === chat)) break;
+    }
+    await this._js(CLEAR_SEARCH);
+    const found = titles.includes(chat);
+    // A different case or spacing is the same chat to a person, not to the search: offer it.
+    const similar = titles.filter((t) => t !== chat && (norm(t).includes(norm(chat)) || norm(chat).includes(norm(t)))).slice(0, 6);
+    return { found, similar };
   }
 
   // opts.quote: the message being answered. Sent as a WhatsApp reply to it when possible,

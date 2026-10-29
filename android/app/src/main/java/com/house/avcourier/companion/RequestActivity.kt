@@ -25,7 +25,7 @@ class RequestActivity : AppCompatActivity() {
 
     private val local get() = localId?.let { app.inbox.get(it) }
     private val pcReq get() = pcId?.let { app.pc.request(it) }
-    private val onPc: (String) -> Unit = { what -> if (what == "requests" || what == "state" || what == "link") render() }
+    private val onPc: (String) -> Unit = { what -> showPcLink(app.pc, app.prefs.paired); if (what == "requests" || what == "state" || what == "link") render() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -39,7 +39,7 @@ class RequestActivity : AppCompatActivity() {
 
     override fun onSupportNavigateUp(): Boolean { finish(); return true }
 
-    override fun onStart() { super.onStart(); app.pc.listen(onPc) }
+    override fun onStart() { super.onStart(); app.pc.listen(onPc); showPcLink(app.pc, app.prefs.paired) }
     override fun onStop() { app.pc.unlisten(onPc); super.onStop() }
 
     // Who and where, from the PC's copy if there is one, else the phone's.

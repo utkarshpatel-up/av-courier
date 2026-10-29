@@ -76,7 +76,7 @@ async function smoke({ win, api, queue, out }) {
   await shot('queue', `go('queue')`);
   while (queue.running) await new Promise((r) => setTimeout(r, 200));
   await shot('queue-done', `openJobs.add(S.queue.jobs[0].id); renderQueue()`);
-  await shot('newjob', `newJob({ sources: ['C:/Footage/Event A'] })`);
+  await shot('newjob', `newJob({ sources: ['C:/Footage/Event A'], notify: [{ channel: 'whatsapp', name: 'Ravi Patel', chat: 'Ravi Patel' }] }); document.querySelector('#j-to').value = 'DV'; document.querySelector('#j-addwho').click()`);
   await win.webContents.executeJavaScript("document.querySelector('#dlg').close()");
 
   // A request listing two recordings: a checklist drafted from it, one item of yours added,
@@ -93,7 +93,18 @@ async function smoke({ win, api, queue, out }) {
   const todo = after.checklist.items.find((i) => i.kind === 'todo');
   await api.checklistItem(list.id, todo.id, 'done');
   const waiting = after.checklist.items.find((i) => i.status === 'waiting');
-  if (waiting) await api.checklistItem(list.id, waiting.id, 'unavailable', 'the drive is at the Vadodara centre');
+  // The drive search found it in two places (drawn here only), and a file is linked by hand.
+  if (waiting) {
+    while (api.state().requests.find((r) => r.id === list.id).checklist.searching) await new Promise((r) => setTimeout(r, 200));
+    await win.webContents.executeJavaScript('refresh()');
+    await shot('checklist-found', `selReq=${JSON.stringify(list.id)}; S.status.drives.drives.push({ root: '/Volumes/Share01', label: 'Share01', network: true, status: 'disk' }); Object.assign(S.requests.find((r) => r.id === ${JSON.stringify(list.id)}).checklist.items.find((i) => i.id === ${JSON.stringify(waiting.id)}), { searchedAt: Date.now(), note: 'Found by name in 2 places: pick one', hits: [{ path: '/Volumes/Nasshare02/Editing/Utkarsh/3018 Adalaj Soneri Satsang E. Dt-20-Aug-26.mp4', where: 'Nasshare02', isFile: true, size: 828375040, exact: true }, { path: 'F:/HD 2026/3001 to 3020/3018 Dt-20-Aug-26', where: 'F:\\\\', isFile: false, size: 0, exact: true }] }); renderRequests(); document.querySelector('.cl').scrollIntoView()`);
+    const linked = path.join(out, 'linked.mp4'); fs.writeFileSync(linked, 'linked by hand');
+    await api.checklistItem(list.id, waiting.id, 'link', [linked]);
+    errors.push('LINKED: ' + JSON.stringify(api.state().requests.find((r) => r.id === list.id).checklist.items.find((i) => i.id === waiting.id)));
+    while (queue.running || queue.jobs.some((j) => j.status === 'queued')) await new Promise((r) => setTimeout(r, 200));
+    await new Promise((r) => setTimeout(r, 300));
+  }
+  if (waiting) await api.checklistItem(list.id, waiting.id, 'reopen').then(() => api.checklistItem(list.id, waiting.id, 'unavailable', 'the drive is at the Vadodara centre'));
   await win.webContents.executeJavaScript('refresh()');
   await shot('checklist-approved', `selReq=${JSON.stringify(list.id)}; renderRequests(); document.querySelector('.cl').scrollIntoView()`);
   errors.push('ITEMS: ' + JSON.stringify(api.state().requests.find((r) => r.id === list.id).checklist.items.map((i) => [i.title, i.status, i.note])));
@@ -131,6 +142,7 @@ async function smoke({ win, api, queue, out }) {
   errors.push('PHONE MESSAGE: ' + await phone('checklistMessage', pr.id));
   await win.webContents.executeJavaScript('refresh()');
   await shot('sheet-request', `selReq=${JSON.stringify(sr.id)}; reqFilter='all'; go('requests'); document.querySelector('main').scrollTop = 0`);
+  await shot('foot', `S.status.whatsapp = 'ready'; S.settings.whatsapp.enabled = true; S.status.phone = { on: true, online: 1, paired: 1 }; S.status.gmail.status = 'error'; S.status.gmail.error = 'Login failed'; render()`);
 
   const final = queue.snapshot().jobs.map((j) => `${j.name}: ${j.status} ${j.done}/${j.count}`);
   fs.writeFileSync(path.join(out, 'result.txt'), [`errors: ${errors.length}`, ...errors, ...final, `request status: ${api.state().requests.find((r) => r.id === req.id).status}`].join('\n'));
